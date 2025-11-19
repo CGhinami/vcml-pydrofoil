@@ -11,6 +11,8 @@ class C:
         self.rv64 = rv64
         self.arg = n
         self.callbacks = None
+        self.dma_regions = []  # list of (base_address, size, memory_buffer)
+        self.verbosity = True
         self.reset()
 
     def _set_callbacks(self, read, write, payload):
@@ -20,16 +22,43 @@ class C:
         #mem = ffi.new('unsigned long[]', 1)
         def pyread(addr):
             addr = int(addr)
-            addr = (addr << 3)
-            res = self.read(self._handle, addr, 8, ffi.cast('uint64_t*', self.mem), payload)
+            byte_addr = (addr << 3)
+
+            # Check DMA regions first
+            for base, size, memory in self.dma_regions:
+                if base <= byte_addr < base + size:
+                    offset = byte_addr - base
+                    # Read 8 bytes from the DMA region
+                    ptr = ffi.cast('uint64_t*', memory + offset)
+                    value = ptr[0]
+                    return _pydrofoil.bitvector(64, value)
+
+            # Fall back to callback
+            res = self.read(self._handle, byte_addr, 8, ffi.cast('uint64_t*', self.mem), payload)
             assert res == 0
             return _pydrofoil.bitvector(64, self.mem[0])
         def pywrite(addr, value):
             addr = int(addr)
-            addr = (addr << 3)
-            res = self.write(self._handle, addr, 8, value, payload)
+            byte_addr = (addr << 3)
+            value = int(value)
+
+            # Check DMA regions first
+            for base, size, memory in self.dma_regions:
+                if base <= byte_addr < base + size:
+                    offset = byte_addr - base
+                    # Write 8 bytes to the DMA region
+                    ptr = ffi.cast('uint64_t*', memory + offset)
+                    ptr[0] = value
+                    return
+
+            # Fall back to callback
+            res = self.write(self._handle, byte_addr, 8, value, payload)
             assert res == 0
         self.callbacks = _pydrofoil.Callbacks(mem_read8_intercept=pyread, mem_write8_intercept=pywrite)
+
+    def set_verbosity(self, verbosity):
+        self.verbosity = verbosity
+        self.cpu.set_verbosity(verbosity)
 
     def step(self):
         self.steps += 1
@@ -45,6 +74,7 @@ class C:
         else:
             self.cpu = cls(self.arg)
         self.steps = 0
+        self.set_verbosity(self.verbosity)
 
 @ffi.def_extern()
 def pydrofoil_allocate_cpu(spec, fn):
@@ -104,13 +134,21 @@ def pydrofoil_cpu_reset(i):
 @ffi.def_extern()
 def pydrofoil_cpu_set_verbosity(i, v):
     cpu = ffi.from_handle(i)
-    cpu.cpu.set_verbosity(bool(v))
+    cpu.set_verbosity(bool(v))
     return 0
 
 @ffi.def_extern()
 def pydrofoil_cpu_set_pc(i, val):
     cpu = ffi.from_handle(i)
     cpu.cpu.write_register('pc', val)
+    return 0
+
+@ffi.def_extern()
+def pydrofoil_cpu_set_dma_region(i, base_address, size, memory):
+    cpu = ffi.from_handle(i)
+    if cpu.callbacks is None:
+        return -1  # RAM callbacks must be set first
+    cpu.dma_regions.append((base_address, size, memory))
     return 0
 
 sys.modules['__main__'].__dict__.update(globals())
