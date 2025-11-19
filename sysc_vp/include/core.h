@@ -6,6 +6,7 @@
 #include <variant>
 #include <systemc>
 #include "python_tasks.h"
+#include <unordered_map>
 
 
 struct PythonTask;
@@ -19,8 +20,18 @@ class PydrofoilCore : public vcml::processor{
 
         bool use_dmi;
         tlm::tlm_dmi dmi_cache;
-        bool sim_started = false;
-        int n_cycles = 0;
+        //bool sim_started = false;
+        bool first_exec = true;
+        unsigned long int n_cycles = 0;
+
+        struct MemRegion {
+            uint8_t* ptr;
+            uint64_t start_addr;
+            uint64_t size;
+        };
+
+        std::unordered_map<uint64_t, MemRegion> mem_regions;
+        void check_for_dmi_regions();
 
         enum class MemTask {Read, Write};
         struct MemAccess {
@@ -53,6 +64,7 @@ class PydrofoilCore : public vcml::processor{
         bool stop_worker = false;
 
         void set_pc(vcml::u64 value); 
+        void set_verbosity(vcml::u32 value); 
         void python_worker_loop();
 
     protected:

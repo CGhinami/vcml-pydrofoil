@@ -15,8 +15,8 @@ int write_mem(void* cpu, uint64_t address, int size, uint64_t value, void* paylo
         return 0;
 
     auto core = reinterpret_cast<PydrofoilCore*>(payload);
-    if(!core->sim_started)
-        return 0;
+    //if(!core->sim_started)
+    //    return 0;
 
     // If the dmi fails then we go the slow way otherwise we're done
     //if(core->use_dmi && 
@@ -44,7 +44,6 @@ int write_mem(void* cpu, uint64_t address, int size, uint64_t value, void* paylo
 
 // The debug leads to a debug transaction avoid timig annotation --> no wait --> we dont have to be in a sc_thread
 int read_mem(void* cpu, uint64_t address, int size, uint64_t* destination, void* payload) {
-    std::cout << "read_mem starts" << std::endl;
     if(address < 0x80000000 && address > 0x1fff){
         memset(destination, 0, 8);
         return 0;}
@@ -54,8 +53,8 @@ int read_mem(void* cpu, uint64_t address, int size, uint64_t* destination, void*
     }
 
     auto core = reinterpret_cast<PydrofoilCore*>(payload);
-    if(!core->sim_started)
-        return 0;
+    //if(!core->sim_started)
+    //    return 0;
     //if(core->use_dmi && 
     //    vcml::success(core->data.access_dmi(tlm::TLM_READ_COMMAND,address,destination,size,vcml::SBI_NONE)))
     //    return 0;
@@ -63,7 +62,7 @@ int read_mem(void* cpu, uint64_t address, int size, uint64_t* destination, void*
     PydrofoilCore::MemAccess memtask;
 
     memtask.type = PydrofoilCore::MemTask::Read;
-    memtask.addr = address;
+    memtask.addr = address; 
     memtask.size = size; // size sometimes appears too big...
     memtask.dest = destination;
 
@@ -74,6 +73,6 @@ int read_mem(void* cpu, uint64_t address, int size, uint64_t* destination, void*
         core->memtask_queue.push(std::move(memtask));
     }
     core->memtask_cv.notify_one();
-    std::cout << "read_mem ends" << std::endl;
+
     return res.get()? 0:1;
 }

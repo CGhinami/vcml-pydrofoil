@@ -24,6 +24,15 @@ CFFI_DLLEXPORT int pydrofoil_cpu_set_ram_read_write_callback(
         int (*)(void* cpu, uint64_t address, int size, uint64_t, void*),
         void* payload);
 
+// Set a DMA region for direct memory access
+// Must be called AFTER pydrofoil_cpu_set_ram_read_write_callback
+// Returns 0 on success, -1 on error
+CFFI_DLLEXPORT int pydrofoil_cpu_set_dma_region(
+        void* cpu,
+        uint64_t base_address,
+        uint64_t size,
+        uint8_t* memory);
+
 
 // NOW:
 //    virtual void reset() override; TODO: problem with way reset is implemented

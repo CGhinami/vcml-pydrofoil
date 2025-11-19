@@ -25,7 +25,7 @@ auto create_handlers(PydrofoilCore& core) // core == alias of the PydrofoilCore,
             Funct::Simulate, [&core](PythonTask &task){
                 auto cycles = std::get<size_t>(task.arg);
                 pydrofoil_cpu_simulate(core.cpu, cycles);
-                core.n_cycles = pydrofoil_cpu_cycles(core.cpu);
+                //core.n_cycles = pydrofoil_cpu_cycles(core.cpu);
                 task.result.set_value(0); 
                 core.memtask_cv.notify_one();
             }},
@@ -44,6 +44,19 @@ auto create_handlers(PydrofoilCore& core) // core == alias of the PydrofoilCore,
             Funct::FreeCpu, [&core](PythonTask &task){
                 pydrofoil_free_cpu(core.cpu);
                 task.result.set_value(0);
+            }},
+            {
+            Funct::SetVerbosity, [&core](PythonTask &task){
+                auto verbosity = std::get<size_t>(task.arg);
+                pydrofoil_cpu_set_verbosity(core.cpu, verbosity);
+                task.result.set_value(0);
+            }},
+            {
+            Funct::SetDMI, [&core](PythonTask &task){
+                auto start_addr = std::get<size_t>(task.arg);
+                auto dmi_region = core.mem_regions[start_addr];
+                int res = pydrofoil_cpu_set_dma_region(core.cpu, start_addr, dmi_region.size, dmi_region.ptr);
+                task.result.set_value(res);
             }}
     };
 }

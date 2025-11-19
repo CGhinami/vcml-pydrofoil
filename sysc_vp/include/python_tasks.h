@@ -11,7 +11,7 @@ extern "C" {
 // std::monostate allows us to have to argument (and still have a valid arg which will default to monostate)
 using TaskArg = std::variant<std::monostate, size_t, const char*>;
 // enum class: no implicit conversion, name's scoped to enum
-enum class Funct {Init, SetCb, Simulate, GetCycles, SetPc, ReadPc, FreeCpu};
+enum class Funct {Init, SetCb, Simulate, GetCycles, SetPc, ReadPc, FreeCpu, SetVerbosity, SetDMI};
 
 struct PythonTask {
     Funct py_funct;

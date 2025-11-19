@@ -20,6 +20,7 @@ elf("elf","")
     task_cv.notify_one(); // notify the waiting thread
     done.get(); // Wait for the result
 
+    set_verbosity(0);
     define_cpureg_rw(0, "pc",8);
 }
 
@@ -82,19 +83,50 @@ bool PydrofoilCore::read_reg_dbg(size_t regno, void* buf, size_t len){
     return false;
 }
 
+
+void PydrofoilCore::check_for_dmi_regions()
+{
+    for(const tlm::tlm_dmi& dmi : data.dmi_cache().get_entries()) 
+    {
+        if(mem_regions.find(dmi.get_start_address()) == mem_regions.end()){
+            uint64_t s = dmi.get_start_address();
+            uint64_t e = dmi.get_end_address();
+            auto size = e - s + 1; // +1 to include the last byte
+
+            mem_regions.emplace(s, MemRegion{dmi.get_dmi_ptr(),s,size});
+
+            PythonTask task;
+            task.py_funct = Funct::SetDMI;
+            task.arg = s;
+            std::future<uint64_t> done = task.result.get_future();
+
+            {
+                std::lock_guard lock(task_mutex);
+                task_queue.push(std::move(task));
+            }
+            task_cv.notify_one(); // notify the waiting thread
+            if(done.get() != 0)
+                mwr::log_info("Setting DMI pointer failed");
+        }
+
+        //mwr::log_info("%llu - %llu", dmi.get_start_address(), dmi.get_end_address());
+    }
+}
+
+
 // Called from a coroutine
 void PydrofoilCore::simulate(size_t cycles)
 {
     PythonTask task;
     task.py_funct = Funct::Simulate;
-    task.arg = cycles;
+    task.arg = first_exec ? 1 : cycles;
     std::future<uint64_t> done = task.result.get_future();
 
     {
         std::lock_guard lock(task_mutex);
         task_queue.push(std::move(task));
     }
-    sim_started = true;
+    //sim_started = true;
     task_cv.notify_one(); // notify the waiting thread
     
 
@@ -119,20 +151,25 @@ void PydrofoilCore::simulate(size_t cycles)
         bool success = false;
         if(memtask.type == MemTask::Read){
             success = (data.read(memtask.addr, memtask.dest, memtask.size, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE);
-            memset(memtask.dest,0x297,8); // To be removed once the 0x1000 initial accesses are fixed
+            //memset(memtask.dest,0x297,8); // To be removed once the 0x1000 initial accesses are fixed
         }
         else
             success = (data.write(memtask.addr, &memtask.value, memtask.size, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE);
         
         memtask.result.set_value(success);
     }
-    sim_started = false;
+    //sim_started = false;
+    first_exec = false;
+    n_cycles += std::get<size_t>(task.arg);
+    check_for_dmi_regions();
 }
 
 
 // Called from a coroutine
 vcml::u64 PydrofoilCore::cycle_count() const
 {   
+    return n_cycles;
+    /*
     if(sim_started)
         return n_cycles;
     
@@ -146,6 +183,7 @@ vcml::u64 PydrofoilCore::cycle_count() const
     }
     task_cv.notify_one(); // notify the waiting thread
     return done.get(); // Wait for the result
+    */
 }
 
 
@@ -194,6 +232,22 @@ void PydrofoilCore::set_pc(vcml::u64 value)
 }
 */
 
+void PydrofoilCore::set_verbosity(vcml::u32 value)
+{
+    PythonTask task;
+    task.py_funct = Funct::SetVerbosity;
+    task.arg = value;
+    std::future<uint64_t> done = task.result.get_future();
+
+    {
+        std::lock_guard lock(task_mutex);
+        task_queue.push(std::move(task));
+    }
+    task_cv.notify_one(); // notify the waiting thread
+
+    done.get(); // Wait for the result
+}
+
 
 void PydrofoilCore::python_worker_loop(){
     std::unordered_map<Funct, std::function<void(PythonTask&)>> handlers = create_handlers(*this);
@@ -221,29 +275,38 @@ void PydrofoilCore::python_worker_loop(){
     }
 }
 
-
-bool PydrofoilCore::get_dmi_ptr(tlm::tlm_command cmd, uint64_t addr)
+/*
+bool PydrofoilCore::get_dmi_ptr(vcml::tlm_target_socket & ,
+                                vcml::tlm_generic_payload &tx,
+                                vcml::tlm_dmi             &dmi)
 {
-    tlm::tlm_generic_payload tx;
-    tx.set_command(cmd);
-    tx.set_address(addr);
-    tx.set_data_length(1);
-    tx.set_dmi_allowed(true);
+    use_dmi = insn->get_direct_mem_ptr(tx, dmi);
+    if (!use_dmi) { return false; }
 
-    sc_core::sc_time delay = sc_core::SC_ZERO_TIME;
-    if (data.get_interface()) { // it ensures that the socket is actually bound to something 
-        if (data->get_direct_mem_ptr(tx, dmi_cache))
-            return true;
-    }
-    return false;
-}
+    auto* ptr = reinterpret_cast<uint8_t*>(dmi.get_dmi_ptr());
+
+    uint64_t s = dmi.get_start_address();
+    uint64_t e = dmi.get_end_address();
+
+    mem_regions.push_back(MemRegion{ptr, size, s}); 
+
+    use_dmi &= data->get_direct_mem_ptr(tx, dmi);
+    if (!use_dmi) { return false; }
+
+    auto* ptr = reinterpret_cast<uint8_t*>(dmi.get_dmi_ptr());
+
+    uint64_t s = dmi.get_start_address();
+    uint64_t e = dmi.get_end_address();
+
+    mem_regions.push_back(MemRegion{ptr, size, s});
+
+    return true;
+}*/
 
 
 void PydrofoilCore::end_of_elaboration()
 {
     processor::end_of_elaboration();
-    //use_dmi = get_dmi_ptr(tlm::TLM_READ_COMMAND, 0x80000000); // Remove magic numbers
-    //use_dmi &= get_dmi_ptr(tlm::TLM_READ_COMMAND, 0x1000); // Remove magic numbers
 
     PythonTask task;
     task.py_funct = Funct::SetCb;
