@@ -4,7 +4,7 @@ project(sysc_vp VERSION 2025.07.31 LANGUAGES C CXX)
 # Look into the cmake/ subdir when searching for a custom module
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 include(FindGithubRepo)
-#set(PYDROFOIL_LIB_DIR ${PROJECT_SOURCE_DIR}/..)
+
 get_filename_component(PYDROFOIL_LIB_DIR "${PROJECT_SOURCE_DIR}/.." ABSOLUTE)
 message(STATUS "PYDROFOIL_LIB_DIR=${PYDROFOIL_LIB_DIR}")
 
@@ -32,8 +32,9 @@ add_executable(sysc_vp
     ${SRC}/memory_callbacks.cpp
 )
 
+# in ${PYDROFOIL_LIB_DIR} we have pydrofoilcapi.h
 target_include_directories(sysc_vp PRIVATE
-    ${PROJECT_SOURCE_DIR}/pydrofoil/include
+    ${PYDROFOIL_LIB_DIR}
     ${PROJECT_SOURCE_DIR}/include
     ${SRC}  
 )
