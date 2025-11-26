@@ -20,7 +20,6 @@ class PydrofoilCore : public vcml::processor{
 
         bool use_dmi;
         tlm::tlm_dmi dmi_cache;
-        //bool sim_started = false;
         bool first_exec = true;
         unsigned long int n_cycles = 0;
 
@@ -69,7 +68,6 @@ class PydrofoilCore : public vcml::processor{
 
     protected:
         virtual void end_of_elaboration() override;
-        bool get_dmi_ptr(tlm::tlm_command cmd, uint64_t addr);
 };
 
 #endif

@@ -3,12 +3,13 @@
 #include "memory_callbacks.h"
 #include <future>
 #include <variant>
+#include "profiling.h"
 
 extern "C" {
     #include "pydrofoilcapi.h" 
 }
 
-// std::monostate allows us to have to argument (and still have a valid arg which will default to monostate)
+// std::monostate allows us to have no argument (and still have a valid arg which will default to monostate)
 using TaskArg = std::variant<std::monostate, size_t, const char*>;
 // enum class: no implicit conversion, name's scoped to enum
 enum class Funct {Init, SetCb, Simulate, GetCycles, SetPc, ReadPc, FreeCpu, SetVerbosity, SetDMI};

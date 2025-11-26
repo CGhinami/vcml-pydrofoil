@@ -1,7 +1,6 @@
 #include "core.h"
 #include <cstdio>
 
-
 PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name, const char* core_type):
 vcml::processor(name,"riscv"),
 elf("elf","")
@@ -66,6 +65,7 @@ bool PydrofoilCore::write_reg_dbg(size_t reg, const void* buf, size_t len)
 
 
 bool PydrofoilCore::read_reg_dbg(size_t regno, void* buf, size_t len){
+
     if(regno == 0 && len==8){
         PythonTask task;
         task.py_funct = Funct::ReadPc;
@@ -169,21 +169,6 @@ void PydrofoilCore::simulate(size_t cycles)
 vcml::u64 PydrofoilCore::cycle_count() const
 {   
     return n_cycles;
-    /*
-    if(sim_started)
-        return n_cycles;
-    
-    PythonTask task;
-    task.py_funct = Funct::GetCycles;
-    std::future<uint64_t> done = task.result.get_future();
-
-    {
-        std::lock_guard lock(task_mutex);
-        task_queue.push(std::move(task));
-    }
-    task_cv.notify_one(); // notify the waiting thread
-    return done.get(); // Wait for the result
-    */
 }
 
 
@@ -274,34 +259,6 @@ void PydrofoilCore::python_worker_loop(){
             it->second(task);
     }
 }
-
-/*
-bool PydrofoilCore::get_dmi_ptr(vcml::tlm_target_socket & ,
-                                vcml::tlm_generic_payload &tx,
-                                vcml::tlm_dmi             &dmi)
-{
-    use_dmi = insn->get_direct_mem_ptr(tx, dmi);
-    if (!use_dmi) { return false; }
-
-    auto* ptr = reinterpret_cast<uint8_t*>(dmi.get_dmi_ptr());
-
-    uint64_t s = dmi.get_start_address();
-    uint64_t e = dmi.get_end_address();
-
-    mem_regions.push_back(MemRegion{ptr, size, s}); 
-
-    use_dmi &= data->get_direct_mem_ptr(tx, dmi);
-    if (!use_dmi) { return false; }
-
-    auto* ptr = reinterpret_cast<uint8_t*>(dmi.get_dmi_ptr());
-
-    uint64_t s = dmi.get_start_address();
-    uint64_t e = dmi.get_end_address();
-
-    mem_regions.push_back(MemRegion{ptr, size, s});
-
-    return true;
-}*/
 
 
 void PydrofoilCore::end_of_elaboration()
