@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# without gdb: ./launch.sh myconfig.cfg
-# with gdb: ./launch.sh -d myconfig.cfg
+# without gdb: ./launch.sh <path to myconfig.cfg>
+# with gdb: ./launch.sh -d <path to myconfig.cfg>
 
 PYDROFOIL_BIN_DIR="../pypy-pydrofoil-scripting-experimental/bin"
 VP_BINARY="./build/sysc_vp"
@@ -20,7 +20,7 @@ if [[ -z "$1" ]]; then
     exit 1
 fi
 
-VP_CFG="benchmark/$1"
+VP_CFG=$1
 
 # Verify that the file exists
 if [[ ! -f "$VP_CFG" ]]; then
