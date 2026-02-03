@@ -13,7 +13,7 @@ struct PythonTask;
 class PydrofoilCore : public vcml::processor{
     public:
         vcml::property<std::string> elf;
-        PydrofoilCore(const sc_core::sc_module_name& name,const char* cpu_type);
+        PydrofoilCore(const sc_core::sc_module_name& name,const char* cpu_type, uint64_t hart_id);
         ~PydrofoilCore();
 
         void* cpu;
@@ -65,6 +65,7 @@ class PydrofoilCore : public vcml::processor{
         void set_pc(vcml::u64 value); 
         void set_verbosity(vcml::u32 value); 
         void python_worker_loop();
+        uint64_t m_hart_id;
 
     protected:
         virtual void end_of_elaboration() override;

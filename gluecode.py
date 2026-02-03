@@ -73,8 +73,16 @@ class C:
             self.cpu = cls(self.arg, callbacks=self.callbacks)
         else:
             self.cpu = cls(self.arg)
+        
         self.steps = 0
         self.set_verbosity(self.verbosity)
+    def set_hartid(self, hartid):
+        try:
+            self.cpu.write_register("mhartid", hartid)
+            print(f"[Python] Successfully set mhartid to {hartid}")
+        except Exception as e:
+            print(f"[Python Error] Failed to set mhartid: {e}")
+        print(f"hardid in python: {self.cpu.read_register('mhartid')}")
 
 @ffi.def_extern()
 def pydrofoil_allocate_cpu(spec, fn):
@@ -149,6 +157,12 @@ def pydrofoil_cpu_set_dma_region(i, base_address, size, memory):
     if cpu.callbacks is None:
         return -1  # RAM callbacks must be set first
     cpu.dma_regions.append((base_address, size, memory))
+    return 0
+
+@ffi.def_extern()
+def pydrofoil_set_hartid(handle, hartid):
+    cpu = ffi.from_handle(handle)
+    cpu.set_hartid(hartid)
     return 0
 
 sys.modules['__main__'].__dict__.update(globals())

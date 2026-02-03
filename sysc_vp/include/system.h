@@ -44,6 +44,7 @@ class system : public vcml::system {
 
  private:
   PydrofoilCore m_core;
+  PydrofoilCore m_core2;
 
   vcml::generic::bus     m_bus;
   vcml::generic::memory  m_ram;
