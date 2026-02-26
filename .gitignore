@@ -1,3 +1,4 @@
 pypy-pydrofoil-scripting-experimental/*
 testplugin
 _pydrofoilcapi_cffi.*
+libpydrofoilcapi_cffi.so

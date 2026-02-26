@@ -76,6 +76,13 @@ auto create_handlers(PydrofoilCore& core) // core == alias of the PydrofoilCore,
                 task.result.set_value(0);
             }},
             {
+            Funct::SetHartId, [&core](PythonTask &task){
+                // We assume arg holds the ID (std::variant check)
+                uint64_t id = std::get<uint64_t>(task.arg);
+                pydrofoil_set_hartid(core.cpu, id);
+                task.result.set_value(0);
+            }},
+            {
             Funct::SetDMI, [&core](PythonTask &task){
                 #if PROFILING
                     Profiler t("SetDMI");

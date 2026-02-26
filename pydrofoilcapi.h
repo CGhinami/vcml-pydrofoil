@@ -15,7 +15,7 @@ CFFI_DLLEXPORT int pydrofoil_cpu_reset(void*);
 CFFI_DLLEXPORT int pydrofoil_cpu_set_verbosity(void*, int); // 0 = quiet, 1 = verbose
 CFFI_DLLEXPORT uint64_t pydrofoil_cpu_pc(void* cpu);
 CFFI_DLLEXPORT int pydrofoil_cpu_set_pc(void* cpu, uint64_t value);
-
+CFFI_DLLEXPORT int pydrofoil_set_hartid(void* cpu, uint64_t value);
 //
 
 CFFI_DLLEXPORT int pydrofoil_cpu_set_ram_read_write_callback(

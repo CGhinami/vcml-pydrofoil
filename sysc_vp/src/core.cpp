@@ -1,7 +1,7 @@
 #include "core.h"
 #include <cstdio>
 
-PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name, const char* core_type):
+PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name, const char* core_type, uint64_t hart_id):
 vcml::processor(name,"riscv"),
 elf("elf","")
 {
@@ -18,9 +18,25 @@ elf("elf","")
     }
     task_cv.notify_one(); // notify the waiting thread
     done.get(); // Wait for the result
+    m_hart_id = hart_id; // Save it in the member variable for later use in reset()
 
-    set_verbosity(0);
+    // // --- NEW: Immediately Force the Hart ID ---
+    // PythonTask id_task;
+    // id_task.py_funct = Funct::SetHartId; // Ensure this Enum exists in python_tasks.h!
+    // id_task.arg = hart_id;
+    
+    // std::future<uint64_t> id_done = id_task.result.get_future();
+    // {
+    //     std::lock_guard lock(task_mutex);
+    //     task_queue.push(std::move(id_task));
+    // }
+    // task_cv.notify_one();
+    // id_done.get(); // Wait for it to finish to be safe
+    // // ------------------------------------------
+
+    set_verbosity(1);
     define_cpureg_rw(0, "pc",8);
+    std::cout << "DEBUG: C++ Constructor for " << name << " has hart_id: " << m_hart_id << " hart_id value is: " << hart_id << std::endl;
 }
 
 
@@ -174,7 +190,23 @@ vcml::u64 PydrofoilCore::cycle_count() const
 
 void PydrofoilCore::reset() 
 {
-    //pydrofoil_cpu_reset(cpu);
+    // 1. Run the standard VCML reset (clears PC, registers, etc.)
+    vcml::processor::reset();
+
+    // 2. Force the Hart ID again
+    // This ensures that even if the Python object was recreated, 
+    // it gets the correct ID before execution starts.
+    PythonTask task;
+    task.py_funct = Funct::SetHartId;
+    task.arg = m_hart_id; // Use the member variable we saved
+    
+    std::future<uint64_t> done = task.result.get_future();
+    {
+        std::lock_guard lock(task_mutex);
+        task_queue.push(std::move(task));
+    }
+    task_cv.notify_one();
+    done.get(); // Wait for confirmation
 }
 
 void PydrofoilCore::set_pc(vcml::u64 value)
