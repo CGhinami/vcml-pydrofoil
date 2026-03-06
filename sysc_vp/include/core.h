@@ -8,6 +8,15 @@
 #include "python_tasks.h"
 #include <unordered_map>
 
+enum : size_t {
+    MEIP = 0, //irq for machine-level external interrupts
+    SEIP = 1  //irq for supervisor-level external interrupts
+};
+
+enum : size_t {
+    MEIP_BIT = 11, //interrupt-pending bit for machine-level external interrupts
+    SEIP_BIT = 9   //interrupt-pending bit for supervisor-level external interrupts
+};
 
 struct PythonTask;
 class PydrofoilCore : public vcml::processor{
@@ -22,6 +31,9 @@ class PydrofoilCore : public vcml::processor{
         tlm::tlm_dmi dmi_cache;
         bool first_exec = true;
         unsigned long int n_cycles = 0;
+
+        //The total number of external interrupt inputs the PLIC can accept
+        //vcml::gpio_target_array<vcml::riscv::plic::NIRQ> irq; 
 
         struct MemRegion {
             uint8_t* ptr;
@@ -49,12 +61,19 @@ class PydrofoilCore : public vcml::processor{
         // The number of steps/cycles depends on the quantum
         void simulate(size_t cycles) override;
         vcml::u64 cycle_count() const override;
+        virtual void interrupt(size_t irq, bool set) override;
         void reset() override;
 
         bool write_reg_dbg(size_t reg, const void* buf, size_t len) override;
         bool read_reg_dbg(size_t regno, void* buf, size_t len) override;
 
     private:
+        std::optional<bool> is_irq_pending;
+        //bool is_irq_pending = false;
+        size_t irq_num;
+
+        void notify_pending_irq(bool set);
+
         std::thread python_worker_thread;
         mutable std::queue<PythonTask> task_queue; // mutable is needed to relax the const-correctness compiler check
                                                    // should only have one element

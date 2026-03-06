@@ -19,7 +19,7 @@ elf("elf","")
     task_cv.notify_one(); // notify the waiting thread
     done.get(); // Wait for the result
 
-    set_verbosity(0);
+    set_verbosity(1);
     define_cpureg_rw(0, "pc",8);
 }
 
@@ -41,6 +41,39 @@ PydrofoilCore::~PydrofoilCore()
     }
 
     python_worker_thread.join();
+}
+
+
+
+void PydrofoilCore::notify_pending_irq(bool set){
+    uint32_t mip_val;
+    if(irq_num == MEIP)
+        mip_val = set ? (MEIP_BIT) : 0;
+    else if(irq_num == SEIP)
+        mip_val = set ? (SEIP_BIT) : 0;
+
+    PythonTask task;
+    task.py_funct = Funct::SetMIP;
+    task.arg = mip_val;
+    std::future<uint64_t> done = task.result.get_future();
+
+    {
+        std::lock_guard lock(task_mutex);
+        task_queue.push(std::move(task));
+    }
+    task_cv.notify_one(); // notify the waiting thread
+    done.get(); // Wait for the result
+}
+
+
+void PydrofoilCore::interrupt(size_t irq, bool set) 
+{
+    if(set)
+        is_irq_pending = true;
+    else
+        is_irq_pending = false;
+    //is_irq_pending = true;
+    irq_num = irq;
 }
 
 
@@ -117,6 +150,11 @@ void PydrofoilCore::check_for_dmi_regions()
 // Called from a coroutine
 void PydrofoilCore::simulate(size_t cycles)
 {
+    if(is_irq_pending.has_value()){
+        notify_pending_irq(is_irq_pending.value());
+        is_irq_pending.reset();
+    }
+
     PythonTask task;
     task.py_funct = Funct::Simulate;
     task.arg = first_exec ? 1 : cycles;

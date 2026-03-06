@@ -4,6 +4,9 @@ system::system(const sc_core::sc_module_name &nm)
     : vcml::system(nm), 
     ram("ram", {SRAM_LO, SRAM_HI}),
     bram("bram", {BOOT_LO, BOOT_HI}),
+    addr_uart0("addr_uart0", {UART0_LO, UART0_HI}),
+    addr_plic("addr_plic", {PLIC_LO, PLIC_HI}),
+    irq_uart0("irq_uart0", IRQ_UART0),
     m_core("core","rv64"),
     m_bus("bus"),
     m_ram("sram", ram.get().length()),
@@ -11,12 +14,17 @@ system::system(const sc_core::sc_module_name &nm)
     m_throttle("throttle"),
     m_loader("loader"),
     m_clock_cpu("clk_cpu", 16 * vcml::MHz),
-    m_reset("rst") {
+    m_reset("rst"),
+    m_uart0("uart0"),
+    m_plic("plic"),
+    m_uart_injector("uart_injector") {
 
     tlm_bind(m_bus, m_loader, "insn");
     tlm_bind(m_bus, m_loader, "data");
     tlm_bind(m_bus, m_ram, "in", ram);
     tlm_bind(m_bus, m_bram, "in", bram);
+    tlm_bind(m_bus, m_plic, "in", addr_plic);
+    tlm_bind(m_bus, m_uart0, "in", addr_uart0);
 
     tlm_bind(m_bus, m_core, "insn");
     tlm_bind(m_bus, m_core, "data");
@@ -26,21 +34,48 @@ system::system(const sc_core::sc_module_name &nm)
     clk_bind(m_clock_cpu, "clk", m_bram, "clk");
     clk_bind(m_clock_cpu, "clk", m_bus, "clk");
     clk_bind(m_clock_cpu, "clk", m_loader, "clk");
-
+    clk_bind(m_clock_cpu, "clk", m_plic, "clk");
+    clk_bind(m_clock_cpu, "clk", m_uart0, "clk");
 
     gpio_bind(m_reset, "rst", m_core, "rst");
     gpio_bind(m_reset, "rst", m_bus, "rst");
     gpio_bind(m_reset, "rst", m_ram, "rst");
     gpio_bind(m_reset, "rst", m_bram, "rst");
     gpio_bind(m_reset, "rst", m_loader, "rst");
+    gpio_bind(m_reset, "rst", m_plic, "rst");
+    gpio_bind(m_reset, "rst", m_uart0, "rst");
 
+    // Connect the uart irq to the plic (target socket)
+    gpio_bind(m_uart0, "irq", m_plic, "irqs", IRQ_UART0);
+
+    // Connect the core irq to the plic (init socket)
+    //gpio_bind(m_core, "irq", m_plic, "irqt"); // is this correct? does gpio bind work with arrays?
+    m_plic.irqt[0].bind(m_core.irq[0]);
+
+    m_uart_injector.uart_tx.bind(m_uart0.serial_rx);
+    m_uart0.serial_tx.stub();
 }
 
 system::~system() {
   // nothing to do
 }
 
+
+void system::inject_data(sc_core::sc_time period){
+    sc_core::sc_spawn( [this, period]() mutable { 
+
+      while(true)
+      {       
+        wait(period);
+        uint8_t data = 15;
+        m_uart_injector.send_to_guest(data); 
+      }
+  });
+}
+
+
 int system::run() {
+    inject_data(sc_core::sc_time(0.05, sc_core::SC_MS));
     double simstart = mwr::timestamp();
     int result = vcml::system::run();
     double realtime = mwr::timestamp() - simstart;

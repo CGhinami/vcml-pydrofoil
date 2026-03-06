@@ -84,6 +84,16 @@ auto create_handlers(PydrofoilCore& core) // core == alias of the PydrofoilCore,
                 auto dmi_region = core.mem_regions[start_addr];
                 int res = pydrofoil_cpu_set_dma_region(core.cpu, start_addr, dmi_region.size, dmi_region.ptr);
                 task.result.set_value(res);
-            }}
+            }},
+            {
+            Funct::SetMIP, [&core](PythonTask &task){
+                #if PROFILING
+                    Profiler t("RaiseIrq");
+                #endif
+                auto value = std::get<size_t>(task.arg);
+                pydrofoil_set_interrupt_pending(core.cpu, value);
+                task.result.set_value(0);
+            }
+            }
     };
 }

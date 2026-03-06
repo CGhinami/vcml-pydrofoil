@@ -126,6 +126,20 @@ def pydrofoil_cpu_pc(i):
     return cpu.cpu.read_register('pc')
 
 @ffi.def_extern()
+def pydrofoil_set_interrupt_pending(i, value):
+    cpu = ffi.from_handle(i)
+    if value > 0:
+        cpu.cpu.write_register('mip', _pydrofoil.bitvector(64, 1) << value)
+    else:
+        cpu.cpu.write_register('mip', _pydrofoil.bitvector(64, 0))
+
+    mstatus = cpu.cpu.lowlevel.read_CSR(0x300)
+    mie = cpu.cpu.lowlevel.read_CSR(0x304)
+    mip = cpu.cpu.lowlevel.read_CSR(0x344)
+    print("mstatus, mie, mip:", hex(mstatus), hex(mie), hex(mip))
+    return 0
+
+@ffi.def_extern()
 def pydrofoil_cpu_reset(i):
     cpu = ffi.from_handle(i)
     cpu.reset()
