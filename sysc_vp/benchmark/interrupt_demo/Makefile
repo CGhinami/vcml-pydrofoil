@@ -4,7 +4,7 @@ OBJDUMP = riscv64-unknown-elf-objdump
 
 ARCH    = -march=rv64imac -mabi=lp64 -mcmodel=medany
 
-CFLAGS  = $(ARCH) -Wall -O2
+CFLAGS  = $(ARCH) -Wall -O0 -g
 LDFLAGS = $(ARCH) -nostdlib -nostartfiles -T link.ld
 
 SRCS = startup.S main.c

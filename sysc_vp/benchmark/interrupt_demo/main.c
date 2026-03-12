@@ -98,20 +98,12 @@ void uart_init(void) {
 
 // called from assembly trap entry
 void trap_dispatch(void) {
-
-    //uintptr_t cause, tval, epc;
-
-    //asm volatile("csrr %0, mcause" : "=r"(cause));
-    //asm volatile("csrr %0, mtval" : "=r"(tval));
-    //asm volatile("csrr %0, mepc"  : "=r"(epc));
-
-    //while (1);
     
     uintptr_t cause;
     asm volatile("csrr %0, mcause" : "=r"(cause));
 
     int is_interrupt = cause >> (sizeof(uintptr_t)*8 - 1);
-    int code = cause & 0xff;
+    int code = cause & 0xfff;
 
     if (is_interrupt && code == 11)
         m_irq_handler();
