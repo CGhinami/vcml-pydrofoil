@@ -61,15 +61,13 @@ system::~system() {
 }
 
 
-void system::inject_data(sc_core::sc_time period){
-    sc_core::sc_spawn( [this, period]() mutable { 
-
-      while(true)
-      {       
-        wait(period);
-        uint8_t data = 15;
-        m_uart_injector.send_to_guest(data); 
-      }
+void system::inject_data(sc_core::sc_time period)
+{
+    sc_core::sc_spawn( [this, period]() mutable 
+    { 
+      wait(period);
+      uint8_t data = 15;
+      m_uart_injector.send_to_guest(data); 
   });
 }
 

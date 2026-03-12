@@ -1,10 +1,19 @@
 #include "core.h"
 #include <cstdio>
+#include "riscv_arch.h"
 
 PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name, const char* core_type):
-vcml::processor(name,"riscv"),
-elf("elf","")
+    vcml::processor(name,"riscv"),
+    elf("elf",""),
+    arch_name("arch_name","rv64"),
+    verbosity("verbose",false),
+    core_arch()
 {
+    if(arch_name.get() == "rv64"){
+        core_arch = Model("rv64", 64, regdb_riscv, 33);
+        set_little_endian(); // Otherwise the gdbserver inverts the bytes it reads
+    }
+    
     python_worker_thread = std::thread(&PydrofoilCore::python_worker_loop, this);
 
     PythonTask task;
@@ -19,8 +28,29 @@ elf("elf","")
     task_cv.notify_one(); // notify the waiting thread
     done.get(); // Wait for the result
 
-    set_verbosity(1);
-    define_cpureg_rw(0, "pc",8);
+    set_verbosity(verbosity.get());
+
+    for (size_t i = 0; i < core_arch.reg_number(); ++i) 
+        define_cpureg_rw(i, core_arch.get_regs_ptr()[i].gdb_name, core_arch.word_size());
+}
+
+
+void PydrofoilCore::test_reg_access(size_t regno){
+    size_t write_val = 0;
+    size_t read_old_val = 0;
+
+    // Read old reg value
+    read_reg_dbg(regno, &read_old_val, 8);
+    mwr::log_info("Value from register x%ld: 0x%lx", regno, read_old_val);
+    // Change reg value
+    write_val = 0x10;
+    write_reg_dbg(regno, (const void*) &write_val, 8);
+    // Check if we changed it
+    size_t read_new_val = 0;
+    read_reg_dbg(regno, &read_new_val, 8);
+    mwr::log_info("New value from register x%ld: 0x%lx", regno, read_new_val);
+    // Restore old value
+    write_reg_dbg(1, (const void*) &read_old_val, 8);
 }
 
 
@@ -72,48 +102,64 @@ void PydrofoilCore::interrupt(size_t irq, bool set)
         is_irq_pending = true;
     else
         is_irq_pending = false;
-    //is_irq_pending = true;
+
     irq_num = irq;
 }
 
 
-bool PydrofoilCore::write_reg_dbg(size_t reg, const void* buf, size_t len)
+bool PydrofoilCore::write_reg_dbg(size_t regno, const void* buf, size_t len)
 {
-    if(reg == 0 && len==8){
-        PythonTask task;
-        task.py_funct = Funct::SetPc;
-        task.arg = *reinterpret_cast<const vcml::u64*>(buf);
-        std::future<uint64_t> done = task.result.get_future();
+    if(regno == 0)
+        return true;
 
-        {
-            std::lock_guard lock(task_mutex);
-            task_queue.push(std::move(task));
-        }
-        task_cv.notify_one(); // notify the waiting thread
+    if(len != core_arch.word_size()) 
+        return false;
 
-        return done.get(); // Wait for the result
+    PythonTask task;
+    task.py_funct = Funct::WriteReg;
+
+    std::string reg_name = core_arch.get_regs_ptr()[regno].x_name;
+    size_t reg_val = *reinterpret_cast<const vcml::u64*>(buf);
+    task.arg = WriteRegArgs{reg_name.c_str(), reg_val};
+
+    std::future<uint64_t> done = task.result.get_future();
+
+    {
+        std::lock_guard lock(task_mutex);
+        task_queue.push(std::move(task));
     }
-    return false;
+    task_cv.notify_one(); // notify the waiting thread
+
+    return done.get(); // Wait for the result
+
 }
 
 
-bool PydrofoilCore::read_reg_dbg(size_t regno, void* buf, size_t len){
-
-    if(regno == 0 && len==8){
-        PythonTask task;
-        task.py_funct = Funct::ReadPc;
-        std::future<uint64_t> done = task.result.get_future();
-
-        {
-            std::lock_guard lock(task_mutex);
-            task_queue.push(std::move(task));
-        }
-        task_cv.notify_one(); // notify the waiting thread
-
-        *reinterpret_cast<vcml::u64*>(buf) = done.get(); // Wait for the result
+bool PydrofoilCore::read_reg_dbg(size_t regno, void* buf, size_t len)
+{
+    if(regno == 0){
+        *reinterpret_cast<vcml::u64*>(buf) = 0;
         return true;
     }
-    return false;
+
+    if(len != core_arch.word_size()) 
+        return false;
+
+    std::string reg_name = core_arch.get_regs_ptr()[regno].x_name;
+
+    PythonTask task;
+    task.py_funct = Funct::ReadReg;
+    task.arg = reg_name.c_str();
+    std::future<uint64_t> done = task.result.get_future();
+
+    {
+        std::lock_guard lock(task_mutex);
+        task_queue.push(std::move(task));
+    }
+    task_cv.notify_one(); // notify the waiting thread
+
+    *reinterpret_cast<vcml::u64*>(buf) = done.get(); // Wait for the result
+    return true;
 }
 
 
@@ -142,7 +188,6 @@ void PydrofoilCore::check_for_dmi_regions()
                 mwr::log_info("Setting DMI pointer failed");
         }
 
-        //mwr::log_info("%llu - %llu", dmi.get_start_address(), dmi.get_end_address());
     }
 }
 
@@ -157,14 +202,14 @@ void PydrofoilCore::simulate(size_t cycles)
 
     PythonTask task;
     task.py_funct = Funct::Simulate;
-    task.arg = first_exec ? 1 : cycles;
+    task.arg = step ? 1 : cycles;
     std::future<uint64_t> done = task.result.get_future();
 
     {
         std::lock_guard lock(task_mutex);
         task_queue.push(std::move(task));
     }
-    //sim_started = true;
+
     task_cv.notify_one(); // notify the waiting thread
     
 
@@ -196,10 +241,58 @@ void PydrofoilCore::simulate(size_t cycles)
         
         memtask.result.set_value(success);
     }
-    //sim_started = false;
-    first_exec = false;
-    n_cycles += std::get<size_t>(task.arg);
+
+    size_t current_steps = done.get();
+    if(!step && current_steps < cycles)
+        handle_breakpoint_hit();
+        
+    n_cycles += current_steps;
     check_for_dmi_regions();
+    step = false;
+}
+
+
+void PydrofoilCore::handle_breakpoint_hit()
+{
+    size_t pc_val = 0;
+    int reg_idx = core_arch.find_reg_idx("pc");
+
+    read_reg_dbg(reg_idx, &pc_val, core_arch.word_size());
+    notify_breakpoint_hit(pc_val);
+}
+
+
+bool PydrofoilCore::insert_breakpoint(vcml::u64 addr) 
+{
+    PythonTask task;
+    task.py_funct = Funct::SetBrkp;
+    task.arg = addr;
+    std::future<uint64_t> done = task.result.get_future();
+
+    {
+        std::lock_guard lock(task_mutex);
+        task_queue.push(std::move(task));
+    }
+   
+    task_cv.notify_one(); // notify the waiting thread
+    return done.get();
+}
+
+
+bool PydrofoilCore::remove_breakpoint(vcml::u64 addr) 
+{
+    PythonTask task;
+    task.py_funct = Funct::RemoveBrkp;
+    task.arg = addr;
+    std::future<uint64_t> done = task.result.get_future();
+
+    {
+        std::lock_guard lock(task_mutex);
+        task_queue.push(std::move(task));
+    }
+   
+    task_cv.notify_one(); // notify the waiting thread
+    return done.get();
 }
 
 
@@ -213,22 +306,6 @@ vcml::u64 PydrofoilCore::cycle_count() const
 void PydrofoilCore::reset() 
 {
     //pydrofoil_cpu_reset(cpu);
-}
-
-void PydrofoilCore::set_pc(vcml::u64 value)
-{
-    PythonTask task;
-    task.py_funct = Funct::SetPc;
-    task.arg = value;
-    std::future<uint64_t> done = task.result.get_future();
-
-    {
-        std::lock_guard lock(task_mutex);
-        task_queue.push(std::move(task));
-    }
-    task_cv.notify_one(); // notify the waiting thread
-
-    done.get(); // Wait for the result
 }
 
 /* How it would look like without the std::future
@@ -255,11 +332,11 @@ void PydrofoilCore::set_pc(vcml::u64 value)
 }
 */
 
-void PydrofoilCore::set_verbosity(vcml::u32 value)
+void PydrofoilCore::set_verbosity(bool value)
 {
     PythonTask task;
     task.py_funct = Funct::SetVerbosity;
-    task.arg = value;
+    task.arg = (bool)value;
     std::future<uint64_t> done = task.result.get_future();
 
     {

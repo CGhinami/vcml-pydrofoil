@@ -31,32 +31,51 @@ auto create_handlers(PydrofoilCore& core) // core == alias of the PydrofoilCore,
                 task.result.set_value(core.n_cycles);
             }},
             {
+            Funct::SetBrkp, [&core](PythonTask &task){
+                #if PROFILING
+                    Profiler t("SetBrkp");
+                #endif
+                auto addr = std::get<size_t>(task.arg);
+                int res = pydrofoil_cpu_set_breakpoint(core.cpu, addr);
+                task.result.set_value(int(res == 0)); 
+            }},
+            {
+            Funct::RemoveBrkp, [&core](PythonTask &task){
+                #if PROFILING
+                    Profiler t("RemoveBrkp");
+                #endif
+                auto addr = std::get<size_t>(task.arg);
+                int res = pydrofoil_cpu_remove_breakpoint(core.cpu, addr);
+                task.result.set_value(int(res == 0)); 
+            }},
+            {
             Funct::Simulate, [&core](PythonTask &task){
                 #if PROFILING
                     Profiler t("Simulate");
                 #endif
                 auto cycles = std::get<size_t>(task.arg);
-                pydrofoil_cpu_simulate(core.cpu, cycles);
+                auto n_steps = pydrofoil_cpu_simulate(core.cpu, cycles);
                 //core.n_cycles = pydrofoil_cpu_cycles(core.cpu);
-                task.result.set_value(0); 
+                task.result.set_value(n_steps); 
                 core.memtask_cv.notify_one();
             }},
             {
-            Funct::SetPc, [&core](PythonTask &task){
+            Funct::WriteReg, [&core](PythonTask &task){
                 #if PROFILING
-                    Profiler t("SetPc");
+                    Profiler t("WriteReg");
                 #endif
-                auto pc_value = std::get<size_t>(task.arg);
-                int res = pydrofoil_cpu_set_pc(core.cpu, pc_value);
+                auto args = std::get<WriteRegArgs>(task.arg);
+                int res = pydrofoil_cpu_write_reg(core.cpu, args.reg_name, args.value);
                 task.result.set_value(int(res == 0));
             }},
             {
-            Funct::ReadPc, [&core](PythonTask &task){
+            Funct::ReadReg, [&core](PythonTask &task){
                 #if PROFILING
-                    Profiler t("ReadPc");
+                    Profiler t("ReadReg");
                 #endif
-                auto pc_value = pydrofoil_cpu_pc(core.cpu);
-                task.result.set_value(pc_value);
+                auto reg_name = std::get<const char*>(task.arg);
+                auto reg_value = pydrofoil_cpu_read_reg(core.cpu, reg_name);
+                task.result.set_value(reg_value);
             }},
             {
             Funct::FreeCpu, [&core](PythonTask &task){

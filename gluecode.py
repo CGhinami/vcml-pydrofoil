@@ -12,6 +12,7 @@ class C:
         self.arg = n
         self.callbacks = None
         self.dma_regions = []  # list of (base_address, size, memory_buffer)
+        self.breakpoints = []  # list of breakpoints
         self.verbosity = True
         self.reset()
 
@@ -102,6 +103,40 @@ def pydrofoil_free_cpu(i):
     return 0
 
 @ffi.def_extern()
+def pydrofoil_cpu_set_pc(i, value):
+    cpu = ffi.from_handle(i)
+    cpu.cpu.write_register('pc', value)
+    cpu.reset()
+    return 0
+
+
+@ffi.def_extern()
+def pydrofoil_cpu_pc(i):
+    cpu = ffi.from_handle(i)
+    return cpu.cpu.read_register('pc')
+
+@ffi.def_extern()
+def pydrofoil_cpu_set_breakpoint(i, addr):
+    cpu = ffi.from_handle(i)
+    
+    if addr in cpu.breakpoints:
+        return 0
+    
+    cpu.breakpoints.append(addr)
+    return 0
+
+@ffi.def_extern()
+def pydrofoil_cpu_remove_breakpoint(i, addr):
+    cpu = ffi.from_handle(i)
+
+    try:
+        cpu.breakpoints.remove(addr)
+        return 0
+    except ValueError:
+        return 1
+
+
+@ffi.def_extern()
 def pydrofoil_cpu_set_ram_read_write_callback(i, read_cb, write_cb, payload):
     cpu = ffi.from_handle(i)
     cpu._set_callbacks(read_cb, write_cb, payload)
@@ -111,9 +146,18 @@ def pydrofoil_cpu_set_ram_read_write_callback(i, read_cb, write_cb, payload):
 @ffi.def_extern()
 def pydrofoil_cpu_simulate(i, steps):
     cpu = ffi.from_handle(i)
-    for i in range(steps):
+    cpu.steps = 0
+
+    for _ in range(steps):
+
+        if cpu.breakpoints: # Only if the breakpoint list is not empty, read the pc
+            pc_val = cpu.cpu.read_register('pc')
+
+            if pc_val in cpu.breakpoints: # Check if the pc is in the list
+                return cpu.steps # return if it is
+
         cpu.step()
-    return steps
+    return cpu.steps
 
 @ffi.def_extern()
 def pydrofoil_cpu_cycles(i):
@@ -121,9 +165,14 @@ def pydrofoil_cpu_cycles(i):
     return cpu.steps
 
 @ffi.def_extern()
-def pydrofoil_cpu_pc(i):
+def pydrofoil_cpu_read_reg(i, name):
     cpu = ffi.from_handle(i)
-    return cpu.cpu.read_register('pc')
+    try:
+        reg_name = ffi.string(name).decode('utf-8')
+        return cpu.cpu.read_register(reg_name)
+    except ValueError:
+        print("Register " + reg_name + " not found")
+        return 1
 
 @ffi.def_extern()
 def pydrofoil_set_interrupt_pending(i, value):
@@ -133,10 +182,10 @@ def pydrofoil_set_interrupt_pending(i, value):
     else:
         cpu.cpu.write_register('mip', _pydrofoil.bitvector(64, 0))
 
-    mstatus = cpu.cpu.lowlevel.read_CSR(0x300)
-    mie = cpu.cpu.lowlevel.read_CSR(0x304)
-    mip = cpu.cpu.lowlevel.read_CSR(0x344)
-    print("mstatus, mie, mip:", hex(mstatus), hex(mie), hex(mip))
+    #mstatus = cpu.cpu.lowlevel.read_CSR(0x300)
+    #mie = cpu.cpu.lowlevel.read_CSR(0x304)
+    #mip = cpu.cpu.lowlevel.read_CSR(0x344)
+    #print("value, mstatus, mie, mip:", value, hex(mstatus), hex(mie), hex(mip))
     return 0
 
 @ffi.def_extern()
@@ -152,10 +201,15 @@ def pydrofoil_cpu_set_verbosity(i, v):
     return 0
 
 @ffi.def_extern()
-def pydrofoil_cpu_set_pc(i, val):
+def pydrofoil_cpu_write_reg(i, name, val):
     cpu = ffi.from_handle(i)
-    cpu.cpu.write_register('pc', val)
-    return 0
+    reg_name = ffi.string(name).decode('utf-8')
+    try:
+        cpu.cpu.write_register(reg_name, val)
+        return 0
+    except ValueError:
+        print("Register " + reg_name + " not found")
+        return 1
 
 @ffi.def_extern()
 def pydrofoil_cpu_set_dma_region(i, base_address, size, memory):

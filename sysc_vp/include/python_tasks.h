@@ -9,10 +9,20 @@ extern "C" {
     #include "pydrofoilcapi.h" 
 }
 
+struct WriteRegArgs {
+    const char* reg_name;
+    size_t value;
+};
+
 // std::monostate allows us to have no argument (and still have a valid arg which will default to monostate)
-using TaskArg = std::variant<std::monostate, size_t, const char*>;
+using TaskArg = std::variant
+                <   std::monostate, 
+                    size_t, 
+                    const char*, 
+                    WriteRegArgs
+                >;
 // enum class: no implicit conversion, name's scoped to enum
-enum class Funct {Init, SetCb, Simulate, GetCycles, SetPc, ReadPc, FreeCpu, SetVerbosity, SetDMI, SetMIP};
+enum class Funct {Init, SetCb, Simulate, GetCycles, WriteReg, ReadReg, FreeCpu, SetVerbosity, SetDMI, SetMIP, SetBrkp, RemoveBrkp};
 
 struct PythonTask {
     Funct py_funct;

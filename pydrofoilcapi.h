@@ -13,8 +13,13 @@ CFFI_DLLEXPORT uint64_t pydrofoil_cpu_cycles(void*);
 CFFI_DLLEXPORT int pydrofoil_cpu_reset(void*);
 
 CFFI_DLLEXPORT int pydrofoil_cpu_set_verbosity(void*, int); // 0 = quiet, 1 = verbose
-CFFI_DLLEXPORT uint64_t pydrofoil_cpu_pc(void* cpu);
+CFFI_DLLEXPORT uint64_t pydrofoil_cpu_read_reg(void* cpu, const char*);
+CFFI_DLLEXPORT uint64_t pydrofoil_cpu_write_reg(void* cpu, const char*, uint64_t value);
+CFFI_DLLEXPORT int pydrofoil_cpu_set_breakpoint(void* cpu, uint64_t addr);
+CFFI_DLLEXPORT int pydrofoil_cpu_remove_breakpoint(void* cpu, uint64_t addr);
+
 CFFI_DLLEXPORT int pydrofoil_cpu_set_pc(void* cpu, uint64_t value);
+CFFI_DLLEXPORT uint64_t pydrofoil_cpu_pc(void* cpu);
 CFFI_DLLEXPORT int pydrofoil_set_interrupt_pending(void* cpu, uint32_t value);
 
 //

@@ -7,7 +7,6 @@
 // so we misuse the payload pointer to pass this as argument
 int write_mem(void* cpu, uint64_t address, int size, uint64_t value, void* payload) 
 {
-    std::cout << "memory access" << std::endl;
     // If we're out of bounds (as it happens) just return
     // Should be changed, NO access when callbacks are being set!!!
     if(address < 0x80000000 && address > 0x1fff){
@@ -50,8 +49,6 @@ int write_mem(void* cpu, uint64_t address, int size, uint64_t value, void* paylo
 // The debug leads to a debug transaction avoid timig annotation --> no wait --> we dont have to be in a sc_thread
 int read_mem(void* cpu, uint64_t address, int size, uint64_t* destination, void* payload) 
 {
-    std::cout << "memory access" << std::endl;
-
     if(address < 0x80000000 && address > 0x1fff){
         std::cout << "peripheral access" << std::endl;
         return 0;}
