@@ -1,1 +1,3 @@
 build/
+benchmark/interrupt_demo/*.o
+benchmark/interrupt_demo/*.elf
