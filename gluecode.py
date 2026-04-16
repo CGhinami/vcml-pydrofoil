@@ -75,6 +75,7 @@ class C:
         else:
             self.cpu = cls(self.arg)
         self.steps = 0
+        self.cpu._set_sail_memory_bounds(0x00000000, 0x4000000000)
         self.set_verbosity(self.verbosity)
 
 @ffi.def_extern()
@@ -182,10 +183,10 @@ def pydrofoil_set_interrupt_pending(i, value):
     else:
         cpu.cpu.write_register('mip', _pydrofoil.bitvector(64, 0))
 
-    #mstatus = cpu.cpu.lowlevel.read_CSR(0x300)
-    #mie = cpu.cpu.lowlevel.read_CSR(0x304)
-    #mip = cpu.cpu.lowlevel.read_CSR(0x344)
-    #print("value, mstatus, mie, mip:", value, hex(mstatus), hex(mie), hex(mip))
+    mstatus = cpu.cpu.lowlevel.read_CSR(0x300)
+    mie = cpu.cpu.lowlevel.read_CSR(0x304)
+    mip = cpu.cpu.lowlevel.read_CSR(0x344)
+    print("value, mstatus, mie, mip:", value, hex(mstatus), hex(mie), hex(mip))
     return 0
 
 @ffi.def_extern()

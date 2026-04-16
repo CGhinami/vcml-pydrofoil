@@ -1,7 +1,7 @@
 #include <stdint.h>
 
-#define UART_BASE 0x80020000
-#define PLIC_BASE 0x80021000
+#define UART_BASE 0x10009000
+#define PLIC_BASE 0x1000a000
 
 #define NIRQ 1024
 #define NIRQ_LINES 32                // Number of interrupt lines per register
@@ -10,11 +10,13 @@
 #define UART_IRQ       5
 #define PLIC_CTX_M     0
 
-#define UART_START_TX  (*(volatile uint8_t*)(UART_BASE + 0x8))
 #define UART_START_RX  (*(volatile uint8_t*)(UART_BASE + 0x0))
+#define UART_START_TX  (*(volatile uint8_t*)(UART_BASE + 0x8))
 #define UART_IRQ_EN    (*(volatile uint32_t*)(UART_BASE + 0x300))
 #define UART_ENABLE    (*(volatile uint32_t*)(UART_BASE + 0x500))
+#define UART_RX        (*(volatile uint8_t*)(UART_BASE + 0x518))
 #define UART_TX        (*(volatile uint8_t*)(UART_BASE + 0x51c))
+
 #define UART_BAUDRATE  (*(volatile uint32_t*)(UART_BASE + 0x524))
 
 // More might be necessary to configure the uart
@@ -58,7 +60,7 @@ void uart_putc(char c) {
     UART_START_TX = 0;
 }
 
-void uart_print(const char* s) {
+void uart_print(char* s) {
     while (*s) uart_putc(*s++);
 }
 
@@ -68,6 +70,8 @@ void m_irq_handler(void)
     uint32_t irq = PLIC_CLAIM(PLIC_CTX_M);
 
     if (irq == UART_IRQ) {
+        char data = UART_RX;
+        uart_print(&data);
         irq_flag = 1;
     }
 

@@ -7,25 +7,7 @@
 // so we misuse the payload pointer to pass this as argument
 int write_mem(void* cpu, uint64_t address, int size, uint64_t value, void* payload) 
 {
-    // If we're out of bounds (as it happens) just return
-    // Should be changed, NO access when callbacks are being set!!!
-    if(address < 0x80000000 && address > 0x1fff){
-        std::cout << "peripheral access" << std::endl;
-        return 0;
-    }
-    if(address > 0x8fffffff || address < 0x1000){
-        std::cout << "out of bound" << std::endl;
-        return 0;
-    }
-
     auto core = reinterpret_cast<PydrofoilCore*>(payload);
-    //if(!core->sim_started)
-    //    return 0;
-
-    // If the dmi fails then we go the slow way otherwise we're done
-    //if(core->use_dmi && 
-    //    vcml::success(core->data.access_dmi(tlm::TLM_WRITE_COMMAND,address,&value,size,vcml::SBI_NONE)))
-    //    return 0;
 
     PydrofoilCore::MemAccess memtask;
 
@@ -49,26 +31,13 @@ int write_mem(void* cpu, uint64_t address, int size, uint64_t value, void* paylo
 // The debug leads to a debug transaction avoid timig annotation --> no wait --> we dont have to be in a sc_thread
 int read_mem(void* cpu, uint64_t address, int size, uint64_t* destination, void* payload) 
 {
-    if(address < 0x80000000 && address > 0x1fff){
-        std::cout << "peripheral access" << std::endl;
-        return 0;}
-    if(address > 0x8fffffff || address < 0x1000){
-        std::cout << "out of bound access" << std::endl;
-        return 0;
-    }
-
     auto core = reinterpret_cast<PydrofoilCore*>(payload);
-    //if(!core->sim_started)
-    //    return 0;
-    //if(core->use_dmi && 
-    //    vcml::success(core->data.access_dmi(tlm::TLM_READ_COMMAND,address,destination,size,vcml::SBI_NONE)))
-    //    return 0;
 
     PydrofoilCore::MemAccess memtask;
 
     memtask.type = PydrofoilCore::MemTask::Read;
     memtask.addr = address; 
-    memtask.size = size; // size sometimes appears too big...
+    memtask.size = size; 
     memtask.dest = destination;
 
     std::future<bool> res = memtask.result.get_future();

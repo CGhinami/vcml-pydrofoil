@@ -239,6 +239,9 @@ void PydrofoilCore::simulate(size_t cycles)
         else
             success = (data.write(memtask.addr, &memtask.value, memtask.size, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE);
         
+        if(!success)
+            mwr::log_info("Memory access failed with address: %lx", memtask.addr);
+
         memtask.result.set_value(success);
     }
 
@@ -254,6 +257,7 @@ void PydrofoilCore::simulate(size_t cycles)
 
 void PydrofoilCore::handle_breakpoint_hit()
 {
+    mwr::log_info("Breakpoint hit");
     size_t pc_val = 0;
     int reg_idx = core_arch.find_reg_idx("pc");
 

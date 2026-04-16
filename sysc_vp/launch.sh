@@ -5,6 +5,7 @@
 
 PYDROFOIL_BIN_DIR="../pypy-pydrofoil-scripting-experimental/bin"
 VP_BINARY="./build/sysc_vp"
+VP_BENCHMARK="./benchmark"
 DEBUG=false
 
 # shift removes the debug flag from the args --> $1 now should be the cfg file
@@ -32,7 +33,11 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:"$PYDROFOIL_BIN_DIR"
 
 if $DEBUG; then
     echo "Running in debug mode (gdb)…"
-    gdb --args "$VP_BINARY" -f "$VP_CFG"
+    if [[ ! -f "$VP_BENCHMARK"/gdb_vp_cmd.gdb ]]; then 
+        gdb --args "$VP_BINARY" -f "$VP_CFG"
+    else
+        gdb -x "$VP_BENCHMARK"/gdb_vp_cmd.gdb --args "$VP_BINARY" -f "$VP_CFG"
+    fi
 else
     echo "Running normally…"
     "$VP_BINARY" -f "$VP_CFG"

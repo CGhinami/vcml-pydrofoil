@@ -68,6 +68,7 @@ void system::inject_data(sc_core::sc_time period)
       wait(period);
       uint8_t data = 15;
       m_uart_injector.send_to_guest(data); 
+      vcml::log_info("Data Injected");
   });
 }
 
