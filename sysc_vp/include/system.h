@@ -5,6 +5,7 @@
 #include "core.h"
 #include "vcml/models/riscv/plic.h"
 #include "uart_injector.h"
+#include <opencv2/opencv.hpp>
 
 /* Eg where the data/instruction mem separation
    could break the simulator:
@@ -18,19 +19,26 @@
 */
 
 enum : mwr::u64 {
-  SRAM_SZ = 128 * mwr::KiB,
+  // 1. Give SRAM its full 3 Megabytes
+  SRAM_SZ = 4 * mwr::MiB,
   SRAM_LO = 0x80000000,
-  SRAM_HI = SRAM_LO + SRAM_SZ - 1,
+  SRAM_HI = SRAM_LO + SRAM_SZ - 1,      // Ends at 0x802FFFFF
 
   BOOT_SZ = 4 * mwr::KiB,
   BOOT_LO = 0x00001000,
   BOOT_HI = BOOT_LO + BOOT_SZ - 1,
 
-  UART0_LO = 0x10009000,
-  UART0_HI = UART0_LO + 0x1000 - 1,
+  // 2. Move UART safely past the SRAM
+  UART0_LO = 0x80400000,
+  UART0_HI = UART0_LO + 0x1000 - 1,     // Ends at 0x80300FFF
 
-  PLIC_LO = 0x1000a000,
-  PLIC_HI = PLIC_LO + 0x224FFF -1
+  // 3. Move PLIC safely past the UART
+  PLIC_LO = 0x80410000,
+  PLIC_HI = PLIC_LO + 0x202000 - 1,     // Ends at 0x80511FFF
+
+  // 4. Move Framebuffer safely past the PLIC
+  FB0MEM_LO = 0x80800000,
+  FB0MEM_HI = FB0MEM_LO + 0x400000 - 1, // Ends at 0x809FFFFF
 };
 
 
@@ -50,6 +58,7 @@ class system : public vcml::system {
   vcml::property<range> addr_uart0;
   vcml::property<range> addr_plic;
   vcml::property<int>   irq_uart0;
+  vcml::property<range> addr_fb0mem;
 
   system(const sc_core::sc_module_name &nm);
   virtual ~system();
@@ -64,6 +73,7 @@ class system : public vcml::system {
   vcml::generic::bus     m_bus;
   vcml::generic::memory  m_ram;
   vcml::generic::memory  m_bram;
+  vcml::generic::clock m_fb0fps;
 
   // A throttle ensures the simulation runs 
   // at a controlled pace, not faster than real time.
@@ -76,6 +86,9 @@ class system : public vcml::system {
   vcml::serial::nrf51  m_uart0;
   vcml::riscv::plic    m_plic;
   UartInjector         m_uart_injector;
+  vcml::generic::fbdev m_fb0;
+  vcml::generic::memory m_fb0mem;
+  cv::VideoCapture     camera;
 
   void inject_data(sc_core::sc_time period);
 };

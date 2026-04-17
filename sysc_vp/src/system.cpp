@@ -6,6 +6,7 @@ system::system(const sc_core::sc_module_name &nm)
     bram("bram", {BOOT_LO, BOOT_HI}),
     addr_uart0("addr_uart0", {UART0_LO, UART0_HI}),
     addr_plic("addr_plic", {PLIC_LO, PLIC_HI}),
+    addr_fb0mem("addr_fb0mem", { FB0MEM_LO, FB0MEM_HI }),
     irq_uart0("irq_uart0", IRQ_UART0),
     m_core("core"),
     m_bus("bus"),
@@ -17,7 +18,11 @@ system::system(const sc_core::sc_module_name &nm)
     m_reset("rst"),
     m_uart0("uart0"),
     m_plic("plic"),
-    m_uart_injector("uart_injector") {
+    m_uart_injector("uart_injector"),
+    m_fb0("fb0"),
+    m_fb0mem("fb0_mem", addr_fb0mem.get().length()), 
+    m_fb0fps("fb0fps", 24 * mwr::Hz),
+    camera(0) {
 
     tlm_bind(m_bus, m_loader, "insn");
     tlm_bind(m_bus, m_loader, "data");
@@ -25,6 +30,8 @@ system::system(const sc_core::sc_module_name &nm)
     tlm_bind(m_bus, m_bram, "in", bram);
     tlm_bind(m_bus, m_plic, "in", addr_plic);
     tlm_bind(m_bus, m_uart0, "in", addr_uart0);
+    tlm_bind(m_bus, m_fb0mem, "in", addr_fb0mem);
+    tlm_bind(m_bus, m_fb0, "out");
 
     tlm_bind(m_bus, m_core, "insn");
     tlm_bind(m_bus, m_core, "data");
@@ -36,6 +43,9 @@ system::system(const sc_core::sc_module_name &nm)
     clk_bind(m_clock_cpu, "clk", m_loader, "clk");
     clk_bind(m_clock_cpu, "clk", m_plic, "clk");
     clk_bind(m_clock_cpu, "clk", m_uart0, "clk");
+    clk_bind(m_clock_cpu, "clk", m_fb0mem, "clk");
+    clk_bind(m_fb0fps, "clk", m_fb0, "clk");
+
 
     gpio_bind(m_reset, "rst", m_core, "rst");
     gpio_bind(m_reset, "rst", m_bus, "rst");
@@ -44,6 +54,8 @@ system::system(const sc_core::sc_module_name &nm)
     gpio_bind(m_reset, "rst", m_loader, "rst");
     gpio_bind(m_reset, "rst", m_plic, "rst");
     gpio_bind(m_reset, "rst", m_uart0, "rst");
+    gpio_bind(m_reset, "rst", m_fb0, "rst");
+    gpio_bind(m_reset, "rst", m_fb0mem, "rst");
 
     // Connect the uart irq to the plic (target socket)
     gpio_bind(m_uart0, "irq", m_plic, "irqs", IRQ_UART0);
@@ -63,12 +75,40 @@ system::~system() {
 
 void system::inject_data(sc_core::sc_time period)
 {
-    sc_core::sc_spawn( [this, period]() mutable 
-    { 
+  if (!camera.isOpened()) {
+    vcml::log_error("Could not open the camera");
+    return;
+  }
+
+  cv::Mat frame;
+
+  sc_core::sc_spawn( [this, period, frame]() mutable 
+  { 
+    vcml::u8* fb_ptr = m_fb0mem.data();
+
+    while(true) 
+    {
+      //vcml::log_info("New frame");
+      camera >> frame;
+
+      if (frame.empty()) {
+        vcml::log_error("Frame is empty!");
+        continue;
+      } else {
+        vcml::log_info("Frame OK: %dx%d", frame.cols, frame.rows);
+      }
+
+      cv::resize(frame, frame, cv::Size(800, 480));
+      cv::cvtColor(frame, frame, cv::COLOR_BGR2GRAY);
+      cv::cvtColor(frame, frame, cv::COLOR_GRAY2BGRA);
+
+      size_t size = frame.total() * frame.elemSize();
+      memcpy(fb_ptr, frame.data, size);
+
       wait(period);
-      uint8_t data = 15;
-      m_uart_injector.send_to_guest(data); 
-      vcml::log_info("Data Injected");
+      // uint8_t data = 15;
+      // m_uart_injector.send_to_guest(data); 
+    }
   });
 }
 

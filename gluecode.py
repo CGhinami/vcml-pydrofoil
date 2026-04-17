@@ -91,6 +91,7 @@ class C:
             self.cpu = cls(self.arg)
         self.steps = 0
         self.cpu._set_sail_memory_bounds(0x00000000, 0x4000000000)
+        self.cpu.write_register('pc', 0x80002000)
         self.set_verbosity(self.verbosity)
 
 @ffi.def_extern()
