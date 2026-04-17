@@ -2,17 +2,22 @@
 #include <cstdio>
 #include "riscv_arch.h"
 
-PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name, const char* core_type):
+PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name):
     vcml::processor(name,"riscv"),
     elf("elf",""),
     arch_name("arch_name","rv64"),
     verbosity("verbose",false),
     core_arch()
 {
+    char* core_type = (char*)"rv32";
     if(arch_name.get() == "rv64"){
         core_arch = Model("rv64", 64, regdb_riscv, 33);
-        set_little_endian(); // Otherwise the gdbserver inverts the bytes it reads
-    }
+        core_type = (char*)"rv64";
+    }else
+        core_arch = Model("rv32", 32, regdb_riscv, 33);
+    
+    mwr::log_info("Running with arch: %d bit", 8*core_arch.word_size());
+    set_little_endian(); // Otherwise the gdbserver inverts the bytes it reads
     
     python_worker_thread = std::thread(&PydrofoilCore::python_worker_loop, this);
 
@@ -40,17 +45,17 @@ void PydrofoilCore::test_reg_access(size_t regno){
     size_t read_old_val = 0;
 
     // Read old reg value
-    read_reg_dbg(regno, &read_old_val, 8);
+    read_reg_dbg(regno, &read_old_val, core_arch.word_size());
     mwr::log_info("Value from register x%ld: 0x%lx", regno, read_old_val);
     // Change reg value
     write_val = 0x10;
-    write_reg_dbg(regno, (const void*) &write_val, 8);
+    write_reg_dbg(regno, (const void*) &write_val, core_arch.word_size());
     // Check if we changed it
     size_t read_new_val = 0;
-    read_reg_dbg(regno, &read_new_val, 8);
+    read_reg_dbg(regno, &read_new_val, core_arch.word_size());
     mwr::log_info("New value from register x%ld: 0x%lx", regno, read_new_val);
     // Restore old value
-    write_reg_dbg(1, (const void*) &read_old_val, 8);
+    write_reg_dbg(1, (const void*) &read_old_val, core_arch.word_size());
 }
 
 
@@ -117,9 +122,10 @@ bool PydrofoilCore::write_reg_dbg(size_t regno, const void* buf, size_t len)
 
     PythonTask task;
     task.py_funct = Funct::WriteReg;
+    size_t reg_val;
 
     std::string reg_name = core_arch.get_regs_ptr()[regno].x_name;
-    size_t reg_val = *reinterpret_cast<const vcml::u64*>(buf);
+    std::memcpy(&reg_val, buf, len);
     task.arg = WriteRegArgs{reg_name.c_str(), reg_val};
 
     std::future<uint64_t> done = task.result.get_future();
@@ -138,7 +144,7 @@ bool PydrofoilCore::write_reg_dbg(size_t regno, const void* buf, size_t len)
 bool PydrofoilCore::read_reg_dbg(size_t regno, void* buf, size_t len)
 {
     if(regno == 0){
-        *reinterpret_cast<vcml::u64*>(buf) = 0;
+        std::memcpy(buf, &regno, core_arch.word_size()); // We just copy 0
         return true;
     }
 
@@ -158,7 +164,9 @@ bool PydrofoilCore::read_reg_dbg(size_t regno, void* buf, size_t len)
     }
     task_cv.notify_one(); // notify the waiting thread
 
-    *reinterpret_cast<vcml::u64*>(buf) = done.get(); // Wait for the result
+    uint64_t reg_val = done.get(); // Wait for the result
+    std::memcpy(buf, &reg_val, len); // Truncates if sizeof reg_val > word_size (only works with little-endian!)
+
     return true;
 }
 

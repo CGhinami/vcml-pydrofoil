@@ -10,7 +10,7 @@ auto create_handlers(PydrofoilCore& core) // core == alias of the PydrofoilCore,
                 #if PROFILING
                     Profiler t("Init");
                 #endif
-                auto core_type = std::get<const char*>(task.arg);   
+                auto core_type = std::get<char*>(task.arg);   
                 core.cpu = pydrofoil_allocate_cpu(core_type, nullptr); 
                 task.result.set_value(0);
             }},

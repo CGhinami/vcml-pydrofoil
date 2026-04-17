@@ -28,7 +28,7 @@ class PydrofoilCore : public vcml::processor{
         vcml::property<std::string> arch_name;
         vcml::property<bool> verbosity;
 
-        PydrofoilCore(const sc_core::sc_module_name& name,const char* cpu_type);
+        PydrofoilCore(const sc_core::sc_module_name& name);
         ~PydrofoilCore();
 
         void* cpu;
@@ -52,10 +52,10 @@ class PydrofoilCore : public vcml::processor{
         enum class MemTask {Read, Write};
         struct MemAccess {
             MemTask type;
-            size_t addr;
+            uint64_t addr;
             size_t size;
-            size_t* dest; // for reads
-            size_t value; // for writes
+            void* dest; // for reads
+            uint64_t value; // for writes
             std::promise<bool> result;
         };
         std::mutex memtask_mutex;

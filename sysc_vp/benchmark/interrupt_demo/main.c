@@ -44,12 +44,12 @@ volatile int irq_flag = 0;
 
 // Write the mask parameter to the mie register (machine interrupt enable)
 // This can enable the machine software/timer/external interrupt
-static inline void csr_set_mie(uint64_t mask) {
+static inline void csr_set_mie(uintptr_t mask) {
     asm volatile("csrs mie, %0" :: "r"(mask));
 }
 
 // Setting the global machine interrupt enable bit
-static inline void csr_set_mstatus(uint64_t mask) {
+static inline void csr_set_mstatus(uintptr_t mask) {
     asm volatile("csrs mstatus, %0" :: "r"(mask));
 }
 

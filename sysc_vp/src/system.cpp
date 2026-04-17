@@ -7,7 +7,7 @@ system::system(const sc_core::sc_module_name &nm)
     addr_uart0("addr_uart0", {UART0_LO, UART0_HI}),
     addr_plic("addr_plic", {PLIC_LO, PLIC_HI}),
     irq_uart0("irq_uart0", IRQ_UART0),
-    m_core("core","rv64"),
+    m_core("core"),
     m_bus("bus"),
     m_ram("sram", ram.get().length()),
     m_bram("bram", bram.get().length()),

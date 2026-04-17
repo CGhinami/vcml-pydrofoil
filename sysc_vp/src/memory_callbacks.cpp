@@ -29,7 +29,7 @@ int write_mem(void* cpu, uint64_t address, int size, uint64_t value, void* paylo
 
 
 // The debug leads to a debug transaction avoid timig annotation --> no wait --> we dont have to be in a sc_thread
-int read_mem(void* cpu, uint64_t address, int size, uint64_t* destination, void* payload) 
+int read_mem(void* cpu, uint64_t address, int size, void* destination, void* payload) 
 {
     auto core = reinterpret_cast<PydrofoilCore*>(payload);
 

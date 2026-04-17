@@ -5,7 +5,7 @@
 #include "core.h"  // for PydrofoilCore
 
 extern "C" {
-    int read_mem(void* cpu, uint64_t address, int size, uint64_t* destination, void* payload);
+    int read_mem(void* cpu, uint64_t address, int size, void* destination, void* payload);
     int write_mem(void* cpu, uint64_t address, int size, uint64_t value, void* payload);
 }
 

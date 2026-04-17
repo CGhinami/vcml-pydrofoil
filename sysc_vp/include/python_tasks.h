@@ -18,7 +18,8 @@ struct WriteRegArgs {
 using TaskArg = std::variant
                 <   std::monostate, 
                     size_t, 
-                    const char*, 
+                    char*, 
+                    const char*,
                     WriteRegArgs
                 >;
 // enum class: no implicit conversion, name's scoped to enum

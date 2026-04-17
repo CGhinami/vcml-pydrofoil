@@ -20,42 +20,57 @@ class C:
         self.read = read
         self.write = write
         self.mem = ffi.new('uint64_t[1]')
-        #mem = ffi.new('unsigned long[]', 1)
-        def pyread(addr):
+        
+        WIDTH_MAP = {
+            8: ('uint64_t*', 64),
+            4: ('uint32_t*', 32),
+            2: ('uint16_t*', 16),
+            1: ('uint8_t*', 8),
+        }
+
+        def resolve_width(width):
+            try:
+                return WIDTH_MAP[width]
+            except KeyError:
+                raise ValueError(f"Unsupported width: {width}")
+            
+        
+        def dma_lookup(addr, ptr_type):
+            for base, size, memory in self.dma_regions:
+                if base <= addr < base + size:
+                    offset = addr - base
+                    return ffi.cast(ptr_type, memory + offset)
+            return None
+
+        def pyread(addr, width):
             addr = int(addr)
-            byte_addr = (addr << 3)
+            ptr_type, bitv_size = resolve_width(width)
 
             # Check DMA regions first
-            for base, size, memory in self.dma_regions:
-                if base <= byte_addr < base + size:
-                    offset = byte_addr - base
-                    # Read 8 bytes from the DMA region
-                    ptr = ffi.cast('uint64_t*', memory + offset)
-                    value = ptr[0]
-                    return _pydrofoil.bitvector(64, value)
+            ptr = dma_lookup(addr, ptr_type)
+            if ptr is not None:
+                return _pydrofoil.bitvector(bitv_size, ptr[0])
 
             # Fall back to callback
-            res = self.read(self._handle, byte_addr, 8, ffi.cast('uint64_t*', self.mem), payload)
+            res = self.read(self._handle, addr, width, ffi.cast(ptr_type, self.mem), payload)
             assert res == 0
-            return _pydrofoil.bitvector(64, self.mem[0])
-        def pywrite(addr, value):
+            return _pydrofoil.bitvector(bitv_size, self.mem[0])
+        
+        def pywrite(addr, width, value):
             addr = int(addr)
-            byte_addr = (addr << 3)
             value = int(value)
+            ptr_type, bitv_size = resolve_width(width)
 
             # Check DMA regions first
-            for base, size, memory in self.dma_regions:
-                if base <= byte_addr < base + size:
-                    offset = byte_addr - base
-                    # Write 8 bytes to the DMA region
-                    ptr = ffi.cast('uint64_t*', memory + offset)
-                    ptr[0] = value
-                    return
+            ptr = dma_lookup(addr, ptr_type)
+            if ptr is not None: # How useful can it be if we're not using ptr afterwards?
+                ptr[0] = value
+                return
 
             # Fall back to callback
-            res = self.write(self._handle, byte_addr, 8, value, payload)
+            res = self.write(self._handle, addr, width, value, payload)
             assert res == 0
-        self.callbacks = _pydrofoil.Callbacks(mem_read8_intercept=pyread, mem_write8_intercept=pywrite)
+        self.callbacks = _pydrofoil.Callbacks(mem_read_intercept=pyread, mem_write_intercept=pywrite)
 
     def set_verbosity(self, verbosity):
         self.verbosity = verbosity
@@ -178,10 +193,13 @@ def pydrofoil_cpu_read_reg(i, name):
 @ffi.def_extern()
 def pydrofoil_set_interrupt_pending(i, value):
     cpu = ffi.from_handle(i)
+
+    bit_size = 64 if cpu.rv64 else 32
+
     if value > 0:
-        cpu.cpu.write_register('mip', _pydrofoil.bitvector(64, 1) << value)
+        cpu.cpu.write_register('mip', _pydrofoil.bitvector(bit_size, 1) << value)
     else:
-        cpu.cpu.write_register('mip', _pydrofoil.bitvector(64, 0))
+        cpu.cpu.write_register('mip', _pydrofoil.bitvector(bit_size, 0))
 
     mstatus = cpu.cpu.lowlevel.read_CSR(0x300)
     mie = cpu.cpu.lowlevel.read_CSR(0x304)

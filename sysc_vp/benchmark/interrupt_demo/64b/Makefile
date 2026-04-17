@@ -4,14 +4,18 @@ OBJDUMP = riscv64-unknown-elf-objdump
 
 ARCH    = -march=rv64imac -mabi=lp64 -mcmodel=medany
 
-CFLAGS  = $(ARCH) -Wall -O0 -g
-LDFLAGS = $(ARCH) -nostdlib -nostartfiles -T link.ld
+SRC_DIR = ..
+LINK_DIR = ..
 
-SRCS = startup.S main.c
+CFLAGS  = $(ARCH) -Wall -O0 -g
+LDFLAGS = $(ARCH) -nostdlib -nostartfiles -T $(LINK_DIR)/link.ld
+
+SRCS = startup.S $(SRC_DIR)/main.c
+OBJS = startup.o main.o
 # This is text substitution
 # After those lines OBJS = startup.o and main.o
-OBJS = $(SRCS:.c=.o)
-OBJS := $(OBJS:.S=.o)
+# OBJS = $(SRCS:.c=.o)
+# OBJS := $(OBJS:.S=.o)
 
 # This is the first rule that make builds, we know from
 # line main.elf: $(OBJS) that the elf depends on the object files
@@ -35,6 +39,10 @@ all: main.elf
 
 main.elf: $(OBJS)
 	$(CC) $(OBJS) $(LDFLAGS) -o $@
+
+# Specific line for the main.c because it's in a different folder
+main.o: $(SRC_DIR)/main.c
+	$(CC) $(CFLAGS) -c $< -o $@
 
 # Optional: generate disassembly
 main.dump: main.elf

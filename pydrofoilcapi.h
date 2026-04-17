@@ -5,8 +5,25 @@
 #  define CFFI_DLLEXPORT  extern
 #endif
 
+typedef int (*pydrofoil_mem_read_cb)(
+    void* cpu,
+    uint64_t address,
+    int size,
+    void* destination,
+    void* payload
+);
+
+typedef int (*pydrofoil_mem_write_cb)(
+    void* cpu,
+    uint64_t address,
+    int size,
+    uint64_t value,
+    void* payload
+);
+
+
 // functions that come from rpython go here
-CFFI_DLLEXPORT void* pydrofoil_allocate_cpu(const char*, const char*);
+CFFI_DLLEXPORT void* pydrofoil_allocate_cpu(char*, const char*);
 CFFI_DLLEXPORT int pydrofoil_free_cpu(void*);
 CFFI_DLLEXPORT int pydrofoil_cpu_simulate(void*, size_t);
 CFFI_DLLEXPORT uint64_t pydrofoil_cpu_cycles(void*);
@@ -14,20 +31,20 @@ CFFI_DLLEXPORT int pydrofoil_cpu_reset(void*);
 
 CFFI_DLLEXPORT int pydrofoil_cpu_set_verbosity(void*, int); // 0 = quiet, 1 = verbose
 CFFI_DLLEXPORT uint64_t pydrofoil_cpu_read_reg(void* cpu, const char*);
-CFFI_DLLEXPORT uint64_t pydrofoil_cpu_write_reg(void* cpu, const char*, uint64_t value);
+CFFI_DLLEXPORT int pydrofoil_cpu_write_reg(void* cpu, const char*, uint64_t value);
 CFFI_DLLEXPORT int pydrofoil_cpu_set_breakpoint(void* cpu, uint64_t addr);
 CFFI_DLLEXPORT int pydrofoil_cpu_remove_breakpoint(void* cpu, uint64_t addr);
 
 CFFI_DLLEXPORT int pydrofoil_cpu_set_pc(void* cpu, uint64_t value);
-CFFI_DLLEXPORT uint64_t pydrofoil_cpu_pc(void* cpu);
+CFFI_DLLEXPORT size_t pydrofoil_cpu_pc(void* cpu);
 CFFI_DLLEXPORT int pydrofoil_set_interrupt_pending(void* cpu, uint32_t value);
 
 //
 
 CFFI_DLLEXPORT int pydrofoil_cpu_set_ram_read_write_callback(
         void* cpu,
-        int (*)(void* cpu, uint64_t address, int size, uint64_t*, void*),
-        int (*)(void* cpu, uint64_t address, int size, uint64_t, void*),
+        pydrofoil_mem_read_cb,
+        pydrofoil_mem_write_cb,
         void* payload);
 
 // Set a DMA region for direct memory access
