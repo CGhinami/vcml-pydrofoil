@@ -2,6 +2,8 @@
 #include <cstdio>
 #include "riscv_arch.h"
 #include <dlfcn.h>
+#include <string>
+#include <filesystem> // <-- Add this for file copying
 
 PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name):
     vcml::processor(name,"riscv"),
@@ -14,6 +16,22 @@ PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name):
     SC_HAS_PROCESS(PydrofoilCore);
     SC_THREAD(sysc_memory_thread);
 
+    std::string base_lib = "../libpydrofoilcapi_cffi.so";
+    // Create a unique library name for THIS specific core (e.g., /tmp/libpydrofoil_core0.so)
+    std::string inst_lib = "/tmp/libpydrofoil_" + std::string(name) + ".so";
+
+    try {
+        // Copy the base library to the new unique path, overwriting if it already exists
+        std::filesystem::copy_file(base_lib, inst_lib, std::filesystem::copy_options::overwrite_existing);
+        mwr::log_info("Created isolated library instance for %s at %s", (const char*)name, inst_lib.c_str());
+    } catch (std::filesystem::filesystem_error& e) {
+        VCML_ERROR("Failed to copy library for multicore isolation: %s", e.what());
+    }
+
+    // --- 1. LOAD THE UNIQUE LIBRARY DYNAMICALLY ---
+    // Use inst_lib and RTLD_LOCAL to ensure total isolation!
+    m_pydrofoil_handle = dlopen(inst_lib.c_str(), RTLD_NOW | RTLD_LOCAL);
+    VCML_ERROR_ON(!m_pydrofoil_handle, "Could not open unique Pydrofoil library '%s': %s", inst_lib.c_str(), dlerror());
 
 
     // --- 1. LOAD THE LIBRARY DYNAMICALLY ---
