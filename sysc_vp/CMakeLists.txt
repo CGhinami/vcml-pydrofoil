@@ -21,6 +21,7 @@ set(MWR_HOME ${DEPS_DIR_GENERAL}/mwr)
 #set(ABSL_ENABLE_INSTALL ON)
 find_github_repo(mwr "machineware-gmbh/mwr")
 find_github_repo(vcml "machineware-gmbh/vcml")
+# find_github_repo(vcml "machineware-gmbh/vcml" "0ce306969ff2eec59c1f4493fe60156c72abb4a9")
 
 set(SRC ${PROJECT_SOURCE_DIR}/src)
 

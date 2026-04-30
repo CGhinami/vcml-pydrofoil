@@ -11,7 +11,7 @@ auto create_handlers(PydrofoilCore& core) // core == alias of the PydrofoilCore,
                     Profiler t("Init");
                 #endif
                 auto core_type = std::get<char*>(task.arg);   
-                core.cpu = pydrofoil_allocate_cpu(core_type, nullptr); 
+                core.cpu = core.m_pydrofoil_allocate_cpu(core_type, nullptr); 
                 task.result.set_value(0);
             }},
             {
@@ -19,7 +19,7 @@ auto create_handlers(PydrofoilCore& core) // core == alias of the PydrofoilCore,
                 #if PROFILING
                     Profiler t("SetCb");
                 #endif
-                int res = pydrofoil_cpu_set_ram_read_write_callback(core.cpu, read_mem, write_mem, &core);//
+                int res = core.m_pydrofoil_cpu_set_ram_read_write_callback(core.cpu, read_mem, write_mem, &core);//
                 task.result.set_value(res);
             }},
             {
@@ -27,7 +27,7 @@ auto create_handlers(PydrofoilCore& core) // core == alias of the PydrofoilCore,
                 #if PROFILING
                     Profiler t("GetCycles");
                 #endif
-                core.n_cycles = pydrofoil_cpu_cycles(core.cpu);
+                core.n_cycles = core.m_pydrofoil_cpu_cycles(core.cpu);
                 task.result.set_value(core.n_cycles);
             }},
             {
@@ -36,7 +36,7 @@ auto create_handlers(PydrofoilCore& core) // core == alias of the PydrofoilCore,
                     Profiler t("SetBrkp");
                 #endif
                 auto addr = std::get<size_t>(task.arg);
-                int res = pydrofoil_cpu_set_breakpoint(core.cpu, addr);
+                int res = core.m_pydrofoil_cpu_set_breakpoint(core.cpu, addr);
                 task.result.set_value(int(res == 0)); 
             }},
             {
@@ -45,7 +45,7 @@ auto create_handlers(PydrofoilCore& core) // core == alias of the PydrofoilCore,
                     Profiler t("RemoveBrkp");
                 #endif
                 auto addr = std::get<size_t>(task.arg);
-                int res = pydrofoil_cpu_remove_breakpoint(core.cpu, addr);
+                int res = core.m_pydrofoil_cpu_remove_breakpoint(core.cpu, addr);
                 task.result.set_value(int(res == 0)); 
             }},
             {
@@ -54,8 +54,8 @@ auto create_handlers(PydrofoilCore& core) // core == alias of the PydrofoilCore,
                     Profiler t("Simulate");
                 #endif
                 auto cycles = std::get<size_t>(task.arg);
-                auto n_steps = pydrofoil_cpu_simulate(core.cpu, cycles);
-                //core.n_cycles = pydrofoil_cpu_cycles(core.cpu);
+                auto n_steps = core.m_pydrofoil_cpu_simulate(core.cpu, cycles);
+                //core.n_cycles = core.m_pydrofoil_cpu_cycles(core.cpu);
                 task.result.set_value(n_steps); 
                 core.memtask_cv.notify_one();
             }},
@@ -65,7 +65,7 @@ auto create_handlers(PydrofoilCore& core) // core == alias of the PydrofoilCore,
                     Profiler t("WriteReg");
                 #endif
                 auto args = std::get<WriteRegArgs>(task.arg);
-                int res = pydrofoil_cpu_write_reg(core.cpu, args.reg_name, args.value);
+                int res = core.m_pydrofoil_cpu_write_reg(core.cpu, args.reg_name, args.value);
                 task.result.set_value(int(res == 0));
             }},
             {
@@ -74,7 +74,7 @@ auto create_handlers(PydrofoilCore& core) // core == alias of the PydrofoilCore,
                     Profiler t("ReadReg");
                 #endif
                 auto reg_name = std::get<const char*>(task.arg);
-                auto reg_value = pydrofoil_cpu_read_reg(core.cpu, reg_name);
+                auto reg_value = core.m_pydrofoil_cpu_read_reg(core.cpu, reg_name);
                 task.result.set_value(reg_value);
             }},
             {
@@ -82,7 +82,7 @@ auto create_handlers(PydrofoilCore& core) // core == alias of the PydrofoilCore,
                 #if PROFILING
                     Profiler t("FreeCpu");
                 #endif
-                pydrofoil_free_cpu(core.cpu);
+                core.m_pydrofoil_free_cpu(core.cpu);
                 task.result.set_value(0);
             }},
             {
@@ -91,7 +91,7 @@ auto create_handlers(PydrofoilCore& core) // core == alias of the PydrofoilCore,
                     Profiler t("SetVerbosity");
                 #endif
                 auto verbosity = std::get<size_t>(task.arg);
-                pydrofoil_cpu_set_verbosity(core.cpu, verbosity);
+                core.m_pydrofoil_cpu_set_verbosity(core.cpu, verbosity);
                 task.result.set_value(0);
             }},
             {
@@ -101,7 +101,7 @@ auto create_handlers(PydrofoilCore& core) // core == alias of the PydrofoilCore,
                 #endif
                 auto start_addr = std::get<size_t>(task.arg);
                 auto dmi_region = core.mem_regions[start_addr];
-                int res = pydrofoil_cpu_set_dma_region(core.cpu, start_addr, dmi_region.size, dmi_region.ptr);
+                int res = core.m_pydrofoil_cpu_set_dma_region(core.cpu, start_addr, dmi_region.size, dmi_region.ptr);
                 task.result.set_value(res);
             }},
             {
@@ -110,7 +110,7 @@ auto create_handlers(PydrofoilCore& core) // core == alias of the PydrofoilCore,
                     Profiler t("RaiseIrq");
                 #endif
                 auto value = std::get<size_t>(task.arg);
-                pydrofoil_set_interrupt_pending(core.cpu, value);
+                core.m_pydrofoil_set_interrupt_pending(core.cpu, value);
                 task.result.set_value(0);
             }
             }

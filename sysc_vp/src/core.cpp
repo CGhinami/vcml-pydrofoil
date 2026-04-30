@@ -1,6 +1,7 @@
 #include "core.h"
 #include <cstdio>
 #include "riscv_arch.h"
+#include <dlfcn.h>
 
 PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name):
     vcml::processor(name,"riscv"),
@@ -9,6 +10,34 @@ PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name):
     verbosity("verbose",false),
     core_arch()
 {
+    async = false; // put elsewhere 
+    SC_HAS_PROCESS(PydrofoilCore);
+    SC_THREAD(sysc_memory_thread);
+
+
+
+    // --- 1. LOAD THE LIBRARY DYNAMICALLY ---
+    // RTLD_NOW ensures all functions are resolved immediately
+    m_pydrofoil_handle = dlopen("libpydrofoilcapi_cffi.so", RTLD_NOW | RTLD_GLOBAL);
+    VCML_ERROR_ON(!m_pydrofoil_handle, "Could not open Pydrofoil library: %s", dlerror());
+
+    // --- 2. MAP THE FUNCTION POINTERS ---
+    m_pydrofoil_allocate_cpu = (void* (*)(const char*, const char*))dlsym(m_pydrofoil_handle, "pydrofoil_allocate_cpu");
+    m_pydrofoil_cpu_set_ram_read_write_callback = (int (*)(void *, int(*)(void *, uint64_t, int, void *, void *), int(*)(void *, uint64_t, int, uint64_t, void *), void *))dlsym(m_pydrofoil_handle, "pydrofoil_cpu_set_ram_read_write_callback");
+    m_pydrofoil_cpu_cycles = (uint64_t (*)(void *))dlsym(m_pydrofoil_handle, "pydrofoil_cpu_cycles");
+    m_pydrofoil_cpu_set_breakpoint = (int (*)(void *, uint64_t))dlsym(m_pydrofoil_handle, "pydrofoil_cpu_set_breakpoint");
+    m_pydrofoil_cpu_remove_breakpoint = (int (*)(void *, uint64_t))dlsym(m_pydrofoil_handle, "pydrofoil_cpu_remove_breakpoint");
+    m_pydrofoil_cpu_simulate = (int (*)(void *, size_t))dlsym(m_pydrofoil_handle, "pydrofoil_cpu_simulate");
+    m_pydrofoil_cpu_write_reg = (int (*)(void *, char const *, uint64_t))dlsym(m_pydrofoil_handle, "pydrofoil_cpu_write_reg");
+    m_pydrofoil_cpu_read_reg = (uint64_t (*)(void *, char const *))dlsym(m_pydrofoil_handle, "pydrofoil_cpu_read_reg");
+    m_pydrofoil_free_cpu = (int (*)(void *))dlsym(m_pydrofoil_handle, "pydrofoil_free_cpu");
+    m_pydrofoil_cpu_set_verbosity = (int (*)(void *, int))dlsym(m_pydrofoil_handle, "pydrofoil_cpu_set_verbosity");
+    m_pydrofoil_cpu_set_dma_region = (int (*)(void *, uint64_t, uint64_t, uint8_t *))dlsym(m_pydrofoil_handle, "pydrofoil_cpu_set_dma_region");
+    m_pydrofoil_set_interrupt_pending = (int (*)(void *, uint32_t))dlsym(m_pydrofoil_handle, "pydrofoil_set_interrupt_pending");
+
+    VCML_ERROR_ON(!m_pydrofoil_allocate_cpu, "Could not load symbol: %s", dlerror());
+    
+    // (You will add the rest of your dlsym calls here later)
     char* core_type = (char*)"rv32";
     if(arch_name.get() == "rv64"){
         core_arch = Model("rv64", 64, regdb_riscv, 33);
@@ -76,6 +105,11 @@ PydrofoilCore::~PydrofoilCore()
     }
 
     python_worker_thread.join();
+    // --- ADDED FOR DLOPEN ---
+    if (m_pydrofoil_handle) {
+        dlclose(m_pydrofoil_handle);
+    }
+    // ------------------------
 }
 
 
@@ -219,6 +253,8 @@ void PydrofoilCore::simulate(size_t cycles)
     }
 
     task_cv.notify_one(); // notify the waiting thread
+
+    // instead of mem worker loop wake up the kernel
     
 
     while(done.wait_for(std::chrono::seconds(0)) != std::future_status::ready){
@@ -270,7 +306,7 @@ void PydrofoilCore::handle_breakpoint_hit()
     int reg_idx = core_arch.find_reg_idx("pc");
 
     read_reg_dbg(reg_idx, &pc_val, core_arch.word_size());
-    notify_breakpoint_hit(pc_val);
+    notify_breakpoint_hit(pc_val, local_time_stamp());
 }
 
 
@@ -403,3 +439,17 @@ void PydrofoilCore::end_of_elaboration()
     task_cv.notify_one(); // notify the waiting thread
     done.get(); // Wait for the result
 }
+
+void PydrofoilCore::sysc_memory_thread() {
+    /*DO MEM ACCESS */
+    mwr::log_info("Memory access thread");
+
+
+}
+
+
+
+// #todo
+// declare new members: m_pydrofoil_allocate_cpu = (allocate_cpu_func)dlsym(m_pydrofoil_handle, "pydrofoil_allocate_cpu");
+// remove .so from build (CMakeLists.txt)
+// potential problem: our worker loop! 

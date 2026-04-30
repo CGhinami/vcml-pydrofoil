@@ -24,6 +24,24 @@ enum : size_t {
 struct PythonTask;
 class PydrofoilCore : public vcml::processor{
     public:
+        // --- ADDED FOR DLOPEN ---
+        void* m_pydrofoil_handle; // Stores the open library
+        
+        // Define the shape of the functions
+        
+        // Create the actual function pointers
+        void* (*m_pydrofoil_allocate_cpu)(const char*, const char*);
+        int (*m_pydrofoil_cpu_set_ram_read_write_callback)(void *, int(*)(void *, uint64_t, int, void *, void *), int(*)(void *, uint64_t, int, uint64_t, void *), void *);
+        uint64_t (*m_pydrofoil_cpu_cycles)(void *);
+        int (*m_pydrofoil_cpu_set_breakpoint)(void *, uint64_t);
+        int (*m_pydrofoil_cpu_remove_breakpoint)(void *, uint64_t);
+        int (*m_pydrofoil_cpu_simulate)(void *, size_t);
+        int (*m_pydrofoil_cpu_write_reg)(void *, char const *, uint64_t);
+        uint64_t (*m_pydrofoil_cpu_read_reg)(void *, char const *);
+        int (*m_pydrofoil_free_cpu)(void *);
+        int (*m_pydrofoil_cpu_set_verbosity)(void *, int);
+        int (*m_pydrofoil_cpu_set_dma_region)(void *, uint64_t, uint64_t, uint8_t *);
+        int (*m_pydrofoil_set_interrupt_pending)(void *, uint32_t);
         vcml::property<std::string> elf;
         vcml::property<std::string> arch_name;
         vcml::property<bool> verbosity;
@@ -76,6 +94,7 @@ class PydrofoilCore : public vcml::processor{
         bool read_reg_dbg(size_t regno, void* buf, size_t len) override;
         bool insert_breakpoint(vcml::u64 addr);
         bool remove_breakpoint(vcml::u64 addr);
+        void sysc_memory_thread();
 
     private:
         bool step = true; // For the first execution we want just 1 instruction to run
