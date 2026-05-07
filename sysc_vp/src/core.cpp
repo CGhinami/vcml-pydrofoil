@@ -12,7 +12,6 @@ PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name):
     verbosity("verbose",false),
     core_arch()
 {
-    async = false; // put elsewhere 
     SC_HAS_PROCESS(PydrofoilCore);
     SC_THREAD(sysc_memory_thread);
 
@@ -84,6 +83,88 @@ PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name):
 
     for (size_t i = 0; i < core_arch.reg_number(); ++i) 
         define_cpureg_rw(i, core_arch.get_regs_ptr()[i].gdb_name, core_arch.word_size());
+}
+
+PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name, uint64_t hart_id):
+    vcml::processor(name,"riscv"),
+    elf("elf",""),
+    arch_name("arch_name","rv64"),
+    verbosity("verbose",false),
+    core_arch()
+{
+    async = false; // put elsewhere 
+    SC_HAS_PROCESS(PydrofoilCore);
+    SC_THREAD(sysc_memory_thread);
+
+    std::string base_lib = "../libpydrofoilcapi_cffi.so";
+    // Create a unique library name for THIS specific core (e.g., /tmp/libpydrofoil_core0.so)
+    std::string inst_lib = "/tmp/libpydrofoil_" + std::string(name) + ".so";
+
+    try {
+        // Copy the base library to the new unique path, overwriting if it already exists
+        std::filesystem::copy_file(base_lib, inst_lib, std::filesystem::copy_options::overwrite_existing);
+        mwr::log_info("Created isolated library instance for %s at %s", (const char*)name, inst_lib.c_str());
+    } catch (std::filesystem::filesystem_error& e) {
+        VCML_ERROR("Failed to copy library for multicore isolation: %s", e.what());
+    }
+
+    // --- 1. LOAD THE UNIQUE LIBRARY DYNAMICALLY ---
+    // Use inst_lib and RTLD_LOCAL to ensure total isolation!
+    m_pydrofoil_handle = dlopen(inst_lib.c_str(), RTLD_NOW | RTLD_LOCAL);
+    VCML_ERROR_ON(!m_pydrofoil_handle, "Could not open unique Pydrofoil library '%s': %s", inst_lib.c_str(), dlerror());
+
+
+    // --- 1. LOAD THE LIBRARY DYNAMICALLY ---
+    // RTLD_NOW ensures all functions are resolved immediately
+    m_pydrofoil_handle = dlopen("libpydrofoilcapi_cffi.so", RTLD_NOW | RTLD_GLOBAL);
+    VCML_ERROR_ON(!m_pydrofoil_handle, "Could not open Pydrofoil library: %s", dlerror());
+
+    // --- 2. MAP THE FUNCTION POINTERS ---
+    m_pydrofoil_allocate_cpu = (void* (*)(const char*, const char*))dlsym(m_pydrofoil_handle, "pydrofoil_allocate_cpu");
+    m_pydrofoil_cpu_set_ram_read_write_callback = (int (*)(void *, int(*)(void *, uint64_t, int, void *, void *), int(*)(void *, uint64_t, int, uint64_t, void *), void *))dlsym(m_pydrofoil_handle, "pydrofoil_cpu_set_ram_read_write_callback");
+    m_pydrofoil_cpu_cycles = (uint64_t (*)(void *))dlsym(m_pydrofoil_handle, "pydrofoil_cpu_cycles");
+    m_pydrofoil_cpu_set_breakpoint = (int (*)(void *, uint64_t))dlsym(m_pydrofoil_handle, "pydrofoil_cpu_set_breakpoint");
+    m_pydrofoil_cpu_remove_breakpoint = (int (*)(void *, uint64_t))dlsym(m_pydrofoil_handle, "pydrofoil_cpu_remove_breakpoint");
+    m_pydrofoil_cpu_simulate = (int (*)(void *, size_t))dlsym(m_pydrofoil_handle, "pydrofoil_cpu_simulate");
+    m_pydrofoil_cpu_write_reg = (int (*)(void *, char const *, uint64_t))dlsym(m_pydrofoil_handle, "pydrofoil_cpu_write_reg");
+    m_pydrofoil_cpu_read_reg = (uint64_t (*)(void *, char const *))dlsym(m_pydrofoil_handle, "pydrofoil_cpu_read_reg");
+    m_pydrofoil_free_cpu = (int (*)(void *))dlsym(m_pydrofoil_handle, "pydrofoil_free_cpu");
+    m_pydrofoil_cpu_set_verbosity = (int (*)(void *, int))dlsym(m_pydrofoil_handle, "pydrofoil_cpu_set_verbosity");
+    m_pydrofoil_cpu_set_dma_region = (int (*)(void *, uint64_t, uint64_t, uint8_t *))dlsym(m_pydrofoil_handle, "pydrofoil_cpu_set_dma_region");
+    m_pydrofoil_set_interrupt_pending = (int (*)(void *, uint32_t))dlsym(m_pydrofoil_handle, "pydrofoil_set_interrupt_pending");
+
+    VCML_ERROR_ON(!m_pydrofoil_allocate_cpu, "Could not load symbol: %s", dlerror());
+    
+    // (You will add the rest of your dlsym calls here later)
+    char* core_type = (char*)"rv32";
+    if(arch_name.get() == "rv64"){
+        core_arch = Model("rv64", 64, regdb_riscv, 33);
+        core_type = (char*)"rv64";
+    }else
+        core_arch = Model("rv32", 32, regdb_riscv, 33);
+    
+    mwr::log_info("Running with arch: %d bit", 8*core_arch.word_size());
+    set_little_endian(); // Otherwise the gdbserver inverts the bytes it reads
+    
+    python_worker_thread = std::thread(&PydrofoilCore::python_worker_loop, this);
+
+    PythonTask task;
+    task.py_funct = Funct::Init;
+    task.arg = core_type;
+    std::future<uint64_t> done = task.result.get_future();
+
+    {
+        std::lock_guard lock(task_mutex);
+        task_queue.push(std::move(task));
+    }
+    task_cv.notify_one(); // notify the waiting thread
+    done.get(); // Wait for the result
+    m_hart_id = hart_id; // Save it in the member variable for later use in reset()
+    set_verbosity(verbosity.get());
+
+    for (size_t i = 0; i < core_arch.reg_number(); ++i) 
+        define_cpureg_rw(i, core_arch.get_regs_ptr()[i].gdb_name, core_arch.word_size());
+    std::cout << "DEBUG: C++ Constructor for " << name << " has hart_id: " << m_hart_id << " hart_id value is: " << hart_id << std::endl;
 }
 
 
@@ -324,7 +405,7 @@ void PydrofoilCore::handle_breakpoint_hit()
     int reg_idx = core_arch.find_reg_idx("pc");
 
     read_reg_dbg(reg_idx, &pc_val, core_arch.word_size());
-    notify_breakpoint_hit(pc_val, local_time_stamp());
+    notify_breakpoint_hit(pc_val);
 }
 
 
@@ -371,7 +452,23 @@ vcml::u64 PydrofoilCore::cycle_count() const
 
 void PydrofoilCore::reset() 
 {
-    //pydrofoil_cpu_reset(cpu);
+    // 1. Run the standard VCML reset (clears PC, registers, etc.)
+    vcml::processor::reset();
+
+    // 2. Force the Hart ID again
+    // This ensures that even if the Python object was recreated, 
+    // it gets the correct ID before execution starts.
+    PythonTask task;
+    task.py_funct = Funct::SetHartId;
+    task.arg = m_hart_id; // Use the member variable we saved
+    
+    std::future<uint64_t> done = task.result.get_future();
+    {
+        std::lock_guard lock(task_mutex);
+        task_queue.push(std::move(task));
+    }
+    task_cv.notify_one();
+    done.get(); // Wait for confirmation
 }
 
 /* How it would look like without the std::future

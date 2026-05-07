@@ -23,7 +23,7 @@ using TaskArg = std::variant
                     WriteRegArgs
                 >;
 // enum class: no implicit conversion, name's scoped to enum
-enum class Funct {Init, SetCb, Simulate, GetCycles, WriteReg, ReadReg, FreeCpu, SetVerbosity, SetDMI, SetMIP, SetBrkp, RemoveBrkp};
+enum class Funct {Init, SetCb, Simulate, GetCycles, WriteReg, ReadReg, FreeCpu, SetVerbosity, SetDMI, SetMIP, SetBrkp, RemoveBrkp, SetHartId};
 
 struct PythonTask {
     Funct py_funct;

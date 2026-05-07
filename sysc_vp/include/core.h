@@ -47,6 +47,7 @@ class PydrofoilCore : public vcml::processor{
         vcml::property<bool> verbosity;
 
         PydrofoilCore(const sc_core::sc_module_name& name);
+        PydrofoilCore(const sc_core::sc_module_name& name, uint64_t hart_id);
         ~PydrofoilCore();
 
         void* cpu;
@@ -116,6 +117,7 @@ class PydrofoilCore : public vcml::processor{
         void test_reg_access(size_t regno);
 
         void handle_breakpoint_hit();
+        uint64_t m_hart_id;
 
     protected:
         virtual void end_of_elaboration() override;

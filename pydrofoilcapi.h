@@ -38,6 +38,7 @@ CFFI_DLLEXPORT int pydrofoil_cpu_remove_breakpoint(void* cpu, uint64_t addr);
 CFFI_DLLEXPORT int pydrofoil_cpu_set_pc(void* cpu, uint64_t value);
 CFFI_DLLEXPORT size_t pydrofoil_cpu_pc(void* cpu);
 CFFI_DLLEXPORT int pydrofoil_set_interrupt_pending(void* cpu, uint32_t value);
+CFFI_DLLEXPORT int pydrofoil_set_hartid(void* cpu, uint64_t value);
 
 //
 
