@@ -1,0 +1,121 @@
+#!/bin/bash -e
+
+ ##############################################################################
+ #                                                                            #
+ # Copyright (C) 2022 MachineWare GmbH                                        #
+ # All Rights Reserved                                                        #
+ #                                                                            #
+ # This is work is licensed under the terms described in the LICENSE file     #
+ # found in the root directory of this source tree.                           #
+ #                                                                            #
+ ##############################################################################
+
+root="$(cd $(dirname $(dirname ${BASH_SOURCE[0]} )) &>/dev/null && pwd)"
+
+prefix=$PWD
+version=2.3.3
+debug=no
+optimize=no
+
+help() {
+    echo "$(basename "$0") [options] -- download and build SystemC"
+    echo "  -h|--help     show this help text"
+    echo "  -p|--prefix   prefix installation path (default: $prefix)"
+    echo "  -v|--version  specify SystemC version  (default: $version)"
+    echo "  -d|--debug    build with debug symbols (default: $debug)"
+    echo "  -o|--optimize build optimized code     (default: $optimize)"
+}
+
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        -p|--prefix) prefix="$2"; shift;;
+        -v|--version) version="$2"; shift;;
+        -d|--debug) debug=yes;;
+        -o|--optimize) optimize=yes;;
+        -h) help; exit 0;;
+        *) echo "Unknown parameter passed: $1"; help; exit 1;;
+    esac
+    shift
+done
+
+prefix=$(realpath $prefix)
+home=$prefix/systemc/$version
+build=$home/BUILD
+src=systemc-$version
+aconf_flags="--enable-static --disable-shared"
+cmake_flags="-DBUILD_SHARED_LIBS=OFF"
+
+mkdir -p $prefix
+
+case $version in
+    2.3.0a) url=https://www.accellera.org/images/downloads/standards/systemc/$src.tar.gz;;
+    2.3.1a) url=https://www.accellera.org/images/downloads/standards/systemc/$src.tar.gz;;
+    2.3.2) url=https://www.accellera.org/images/downloads/standards/systemc/$src.tar.gz;;
+    2.3.3) url=https://www.accellera.org/images/downloads/standards/systemc/$src.tar.gz;;
+    2.3.4) url=https://github.com/accellera-official/systemc/archive/refs/tags/2.3.4.tar.gz;;
+    3.0.0) url=https://github.com/accellera-official/systemc/archive/refs/tags/3.0.0.tar.gz;;
+    *) echo "Unknown SystemC version: $version"; exit 1;;
+esac
+
+echo ""
+echo "+----------------------------------------------------------------------"
+echo "| source:   " $url
+echo "| prefix:   " $prefix
+echo "| build:    " $build
+echo "| version:  " $version
+echo "| debug:    " $debug
+echo "| optimize: " $optimize
+echo "+----------------------------------------------------------------------"
+echo ""
+
+if [ $debug == "yes" ]; then
+    aconf_flags+=" --enable-debug"
+    cmake_build="DEBUG"
+else
+    aconf_flags+=" --disable-debug"
+    cmake_build="RELEASE"
+fi
+
+if [ $optimize == "yes" ]; then
+    aconf_flags+=" --enable-optimize"
+    cmake_build="RELEASE"
+else
+    aconf_flags+=" --disable-optimize"
+    cmake_build="DEBUG"
+fi
+
+if [ $optimize == "yes" ] && [ $debug == "yes" ]; then
+    cmake_build="RelWithDebInfo"
+fi
+
+if [ -n "$(find /usr/include -name 'valgrind.h' 2>/dev/null)" ]; then
+    export CXXFLAGS="$CXXFLAGS -DHAVE_VALGRIND_H"
+fi
+
+mkdir -p $home && cd $home
+
+if [ ! -d $src ]; then
+    test -f $(basename $url) || wget $url
+    tar -xzf $(basename $url)
+
+    for p in $(ls $root/patches/systemc-$version-*.patch 2>/dev/null); do
+        echo "applying $p"
+        (cd $src && patch -p1 <$p)
+    done
+fi
+
+if [ ! -d $build ]; then
+    mkdir -p $build && cd $build
+    if [ -f ../$src/CMakeLists.txt ]; then
+        cmake -DCMAKE_INSTALL_PREFIX=$home -DCMAKE_BUILD_TYPE=$cmake_build $cmake_flags ../$src
+    else
+        ../$src/configure --prefix=$home $aconf_flags
+    fi
+fi
+
+make -C $build -j $(nproc)
+make -C $build install
+
+echo ""
+echo "SYSTEMC_HOME $home"
+

@@ -1,0 +1,26 @@
+/******************************************************************************
+ *                                                                            *
+ * Copyright (C) 2022 MachineWare GmbH                                        *
+ * All Rights Reserved                                                        *
+ *                                                                            *
+ * This is work is licensed under the terms described in the LICENSE file     *
+ * found in the root directory of this source tree.                           *
+ *                                                                            *
+ ******************************************************************************/
+
+#ifndef MWR_VERSION_H
+#define MWR_VERSION_H
+
+#define MWR_VERSION_MAJOR   @PROJECT_VERSION_MAJOR@
+#define MWR_VERSION_MINOR   @PROJECT_VERSION_MINOR@
+#define MWR_VERSION_PATCH   @PROJECT_VERSION_PATCH@
+
+#define MWR_GIT_REV         "@MWR_GIT_REV@"
+#define MWR_GIT_REV_SHORT   "@MWR_GIT_REV_SHORT@"
+
+#define MWR_VERSION         @MWR_VERSION_INT@
+#define MWR_VERSION_STRING  "@MWR_VERSION_STRING@"
+
+MWR_DECLARE_MODULE(MWR, "mwr", "Apache-2.0")
+
+#endif
