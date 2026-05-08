@@ -8,6 +8,8 @@
 #include "python_tasks.h"
 #include <unordered_map>
 #include "arch.h"
+#include <csetjmp>
+#include <exception>
 
 enum : size_t {
     MEIP = 0, //irq for machine-level external interrupts
@@ -96,6 +98,7 @@ class PydrofoilCore : public vcml::processor{
         bool insert_breakpoint(vcml::u64 addr);
         bool remove_breakpoint(vcml::u64 addr);
         void sysc_memory_thread();
+        void sc_sync_catch_ex(std::function<void(void)> job);
 
     private:
         bool step = true; // For the first execution we want just 1 instruction to run

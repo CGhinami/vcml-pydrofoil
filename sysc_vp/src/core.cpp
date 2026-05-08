@@ -92,7 +92,7 @@ PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name, uint64_t hart_
     verbosity("verbose",false),
     core_arch()
 {
-    async = false; // put elsewhere 
+    async = true; // put elsewhere 
     SC_HAS_PROCESS(PydrofoilCore);
     SC_THREAD(sysc_memory_thread);
 
@@ -332,6 +332,14 @@ void PydrofoilCore::check_for_dmi_regions()
     }
 }
 
+void PydrofoilCore::sc_sync_catch_ex(std::function<void(void)> job) {
+    try {
+        vcml::sc_sync(std::move(job));
+    } catch (...) {
+        // Catch all exceptions to prevent SystemC from terminating the simulation
+        mwr::log_error("Exception caught in sc_sync_catch_ex");
+    }
+}
 
 // Called from a coroutine
 void PydrofoilCore::simulate(size_t cycles)
@@ -376,12 +384,29 @@ void PydrofoilCore::simulate(size_t cycles)
 
         bool success = false;
         if(memtask.type == MemTask::Read){
-            success = (data.read(memtask.addr, memtask.dest, memtask.size, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE);
+            if (vcml::is_thread()){
+                success = (data.read(memtask.addr, memtask.dest, memtask.size, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE);
+            }
+            else {
+                mwr::log_info("os thread!"); 
+                sc_sync_catch_ex([&]() {
+                    success = (data.read(memtask.addr, memtask.dest, memtask.size, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE);
+                });
+            }
+
             //memset(memtask.dest,0x297,8); // To be removed once the 0x1000 initial accesses are fixed
         }
-        else
-            success = (data.write(memtask.addr, &memtask.value, memtask.size, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE);
-        
+        else {
+            if (vcml::is_thread()){
+                success = (data.write(memtask.addr, &memtask.value, memtask.size, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE);
+            }
+            else {
+                mwr::log_info("os thread!");
+                sc_sync_catch_ex([&]() {
+                    success = (data.write(memtask.addr, &memtask.value, memtask.size, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE);
+                });
+            }
+        }
         if(!success)
             mwr::log_info("Memory access failed with address: %lx", memtask.addr);
 
