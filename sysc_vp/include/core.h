@@ -48,8 +48,7 @@ class PydrofoilCore : public vcml::processor{
         vcml::property<std::string> arch_name;
         vcml::property<bool> verbosity;
 
-        PydrofoilCore(const sc_core::sc_module_name& name);
-        PydrofoilCore(const sc_core::sc_module_name& name, uint64_t hart_id);
+        PydrofoilCore(const sc_core::sc_module_name& name, uint64_t hart_id = 0);
         ~PydrofoilCore();
 
         void* cpu;
