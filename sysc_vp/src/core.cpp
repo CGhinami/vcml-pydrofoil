@@ -116,8 +116,8 @@ PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name, uint64_t hart_
 
     // --- 1. LOAD THE LIBRARY DYNAMICALLY ---
     // RTLD_NOW ensures all functions are resolved immediately
-    m_pydrofoil_handle = dlopen("libpydrofoilcapi_cffi.so", RTLD_NOW | RTLD_GLOBAL);
-    VCML_ERROR_ON(!m_pydrofoil_handle, "Could not open Pydrofoil library: %s", dlerror());
+    // m_pydrofoil_handle = dlopen("libpydrofoilcapi_cffi.so", RTLD_NOW | RTLD_GLOBAL);
+    // VCML_ERROR_ON(!m_pydrofoil_handle, "Could not open Pydrofoil library: %s", dlerror());
 
     // --- 2. MAP THE FUNCTION POINTERS ---
     m_pydrofoil_allocate_cpu = (void* (*)(const char*, const char*))dlsym(m_pydrofoil_handle, "pydrofoil_allocate_cpu");
@@ -590,6 +590,4 @@ void PydrofoilCore::sysc_memory_thread() {
 
 
 // #todo
-// declare new members: m_pydrofoil_allocate_cpu = (allocate_cpu_func)dlsym(m_pydrofoil_handle, "pydrofoil_allocate_cpu");
-// remove .so from build (CMakeLists.txt)
-// potential problem: our worker loop! 
+// interrupts in the multicore test target not working.
