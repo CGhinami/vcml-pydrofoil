@@ -12,7 +12,10 @@ PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name, uint64_t hart_
     verbosity("verbose",false),
     core_arch()
 {
-    async = false; // put elsewhere 
+    std::cout << "async has value: " << async << std::endl;
+    // mwr::log_info("test");
+    // mwr::log_info("async has value: %d", (int)(bool)async);
+    // async = false; // put elsewhere 
     SC_HAS_PROCESS(PydrofoilCore);
     SC_THREAD(sysc_memory_thread);
 
