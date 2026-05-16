@@ -8,13 +8,6 @@
 int write_mem(void* cpu, uint64_t address, int size, uint64_t value, void* payload) 
 {
     auto core = reinterpret_cast<PydrofoilCore*>(payload);
-    // --- 1. INTERCEPT THE KILL SWITCH ---
-    if (address == 0x20000000 && value == 1) {
-        mwr::log_info("Benchmark finished! Core hit the kill switch. Stopping simulation...");
-        sc_core::sc_stop(); // Tell SystemC to exit safely
-        return 0;           // Return 0 for success
-    }
-
     PydrofoilCore::MemAccess memtask;
 
     memtask.type = PydrofoilCore::MemTask::Write;

@@ -12,7 +12,7 @@ PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name, uint64_t hart_
     verbosity("verbose",false),
     core_arch()
 {
-    async = true; // put elsewhere 
+    async = false; // put elsewhere 
     SC_HAS_PROCESS(PydrofoilCore);
     SC_THREAD(sysc_memory_thread);
 
@@ -264,6 +264,7 @@ void PydrofoilCore::sc_sync_catch_ex(std::function<void(void)> job) {
 // Called from a coroutine
 void PydrofoilCore::simulate(size_t cycles)
 {
+    //print
     if(is_irq_pending.has_value()){
         notify_pending_irq(is_irq_pending.value());
         is_irq_pending.reset();
@@ -331,6 +332,7 @@ void PydrofoilCore::simulate(size_t cycles)
             mwr::log_info("Memory access failed with address: %lx", memtask.addr);
 
         memtask.result.set_value(success);
+        //print
     }
 
     size_t current_steps = done.get();

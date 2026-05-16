@@ -26,6 +26,9 @@ enum : mwr::u64 {
   BOOT_LO = 0x00001000,
   BOOT_HI = BOOT_LO + BOOT_SZ - 1,
 
+  SIMDEV_LO = 0x10008000,
+  SIMDEV_HI = SIMDEV_LO + 0x1000 - 1,
+
   UART0_LO = 0x10009000,
   UART0_HI = UART0_LO + 0x1000 - 1,
 
@@ -49,6 +52,7 @@ class system : public vcml::system {
   vcml::property<range> bram;
   vcml::property<range> addr_uart0;
   vcml::property<range> addr_plic;
+  vcml::property<vcml::range> addr_simdev;
   vcml::property<int>   irq_uart0;
 
   system(const sc_core::sc_module_name &nm);
@@ -69,6 +73,7 @@ class system : public vcml::system {
   // at a controlled pace, not faster than real time.
   vcml::meta::throttle m_throttle;
   vcml::meta::loader   m_loader;
+  vcml::meta::simdev m_simdev;
 
   vcml::generic::clock m_clock_cpu;
   vcml::generic::reset m_reset;
