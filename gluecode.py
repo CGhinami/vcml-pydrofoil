@@ -89,9 +89,18 @@ class C:
             self.cpu = cls(self.arg, callbacks=self.callbacks)
         else:
             self.cpu = cls(self.arg)
+        self.cpu._set_htif_tohost(0x900F0000)
         self.steps = 0
         self.cpu._set_sail_memory_bounds(0x00000000, 0x4000000000)
         self.set_verbosity(self.verbosity)
+
+        print("\n--- AVAILABLE METHODS ON self.cpu ---")
+        for attr in dir(self.cpu):
+            # Ignore built-in python methods like __init__
+            if not attr.startswith("__"): 
+                print(attr)
+        print("------------------------------------\n")
+        # ------------------------------------------
      
     def set_hartid(self, hartid):
         try:
