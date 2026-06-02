@@ -332,7 +332,7 @@ void PydrofoilCore::simulate(size_t cycles)
             }
             else
             {
-                mwr::log_info("os thread!");
+                // mwr::log_info("os thread!");
                 sc_sync_catch_ex([&]()
                                  { success = (data.read(memtask.addr, memtask.dest, memtask.size, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE); });
             }
@@ -347,7 +347,7 @@ void PydrofoilCore::simulate(size_t cycles)
             }
             else
             {
-                mwr::log_info("os thread!");
+                // mwr::log_info("os thread!");
                 sc_sync_catch_ex([&]()
                                  { success = (data.write(memtask.addr, &memtask.value, memtask.size, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE); });
             }

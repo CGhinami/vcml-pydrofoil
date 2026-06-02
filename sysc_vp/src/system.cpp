@@ -7,6 +7,7 @@ system::system(const sc_core::sc_module_name &nm)
       addr_uart0("addr_uart0", {UART0_LO, UART0_HI}),
       addr_plic("addr_plic", {PLIC_LO, PLIC_HI}),
       addr_simdev("addr_simdev", {SIMDEV_LO, SIMDEV_HI}),
+      addr_multicore_simdev("addr_multicore_simdev", {MULTICORE_SIMDEV_LO, MULTICORE_SIMDEV_HI}),
       irq_uart0("irq_uart0", IRQ_UART0),
       m_core("core", 0),
       m_core2("core2", 1),
@@ -20,7 +21,10 @@ system::system(const sc_core::sc_module_name &nm)
       m_uart0("uart0"),
       m_plic("plic"),
       m_simdev("simdev"),
-      m_uart_injector("uart_injector")
+      m_uart_injector("uart_injector"),
+      // Inside your top-level SoC class definition: 
+      // Inside your top-level SoC constructor initializer list:
+      m_multicore_simdev("multicore_simdev", 2) // Instantiating with 2 cores
 {
 
   tlm_bind(m_bus, m_loader, "insn");
@@ -32,6 +36,8 @@ system::system(const sc_core::sc_module_name &nm)
   tlm_bind(m_bus, m_core2, "insn");
   tlm_bind(m_bus, m_core2, "data");
   tlm_bind(m_bus, m_simdev, "in", addr_simdev);
+  // 2. Multicore Simdev an den Bus binden
+  tlm_bind(m_bus, m_multicore_simdev, "in", addr_multicore_simdev);
 
   tlm_bind(m_bus, m_core, "insn");
   tlm_bind(m_bus, m_core, "data");
@@ -45,6 +51,8 @@ system::system(const sc_core::sc_module_name &nm)
   clk_bind(m_clock_cpu, "clk", m_plic, "clk");
   clk_bind(m_clock_cpu, "clk", m_uart0, "clk");
   clk_bind(m_clock_cpu, "clk", m_simdev, "clk");
+  // 3. Takt an das Multicore Simdev binden
+  clk_bind(m_clock_cpu, "clk", m_multicore_simdev, "clk");
 
   gpio_bind(m_reset, "rst", m_core, "rst");
   gpio_bind(m_reset, "rst", m_core2, "rst");
@@ -55,7 +63,7 @@ system::system(const sc_core::sc_module_name &nm)
   gpio_bind(m_reset, "rst", m_plic, "rst");
   gpio_bind(m_reset, "rst", m_uart0, "rst");
   gpio_bind(m_reset, "rst", m_simdev, "rst");
-
+  gpio_bind(m_reset, "rst", m_multicore_simdev, "rst");
   // Connect the uart irq to the plic (target socket)
   gpio_bind(m_uart0, "irq", m_plic, "irqs", IRQ_UART0);
 

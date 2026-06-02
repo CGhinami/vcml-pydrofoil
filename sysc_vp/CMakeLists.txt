@@ -32,6 +32,7 @@ add_executable(sysc_vp
     ${SRC}/python_tasks.cpp
     ${SRC}/memory_callbacks.cpp
     ${SRC}/uart_injector.cpp
+    ${SRC}/multicore_simdev.cpp
 )
 
 # in ${PYDROFOIL_LIB_DIR} we have pydrofoilcapi.h

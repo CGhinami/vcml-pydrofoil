@@ -5,6 +5,7 @@
 #include "core.h"
 #include "vcml/models/riscv/plic.h"
 #include "uart_injector.h"
+#include "multicore_simdev.h"
 
 /* Eg where the data/instruction mem separation
    could break the simulator:
@@ -26,6 +27,9 @@ enum : mwr::u64 {
   BOOT_LO = 0x00001000,
   BOOT_HI = BOOT_LO + BOOT_SZ - 1,
 
+  MULTICORE_SIMDEV_LO = 0x10000000,
+  MULTICORE_SIMDEV_HI = MULTICORE_SIMDEV_LO + 0x1000 - 1,
+  
   SIMDEV_LO = 0x10008000,
   SIMDEV_HI = SIMDEV_LO + 0x1000 - 1,
 
@@ -53,6 +57,7 @@ class system : public vcml::system {
   vcml::property<range> addr_uart0;
   vcml::property<range> addr_plic;
   vcml::property<vcml::range> addr_simdev;
+  vcml::property<vcml::range> addr_multicore_simdev;
   vcml::property<int>   irq_uart0;
 
   system(const sc_core::sc_module_name &nm);
@@ -68,6 +73,7 @@ class system : public vcml::system {
   vcml::generic::bus     m_bus;
   vcml::generic::memory  m_ram;
   vcml::generic::memory  m_bram;
+  vcml::meta::multicore_simdev m_multicore_simdev;
 
   // A throttle ensures the simulation runs 
   // at a controlled pace, not faster than real time.
