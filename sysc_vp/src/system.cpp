@@ -6,6 +6,7 @@ system::system(const sc_core::sc_module_name &nm)
     bram("bram", {BOOT_LO, BOOT_HI}),
     addr_uart0("addr_uart0", {UART0_LO, UART0_HI}),
     addr_plic("addr_plic", {PLIC_LO, PLIC_HI}),
+    addr_simdev("addr_simdev", {SIMDEV_LO, SIMDEV_HI}),
     irq_uart0("irq_uart0", IRQ_UART0),
     m_core("core"),
     m_bus("bus"),
@@ -17,6 +18,7 @@ system::system(const sc_core::sc_module_name &nm)
     m_reset("rst"),
     m_uart0("uart0"),
     m_plic("plic"),
+    m_simdev("simdev"),
     m_uart_injector("uart_injector") {
 
     tlm_bind(m_bus, m_loader, "insn");
@@ -25,6 +27,7 @@ system::system(const sc_core::sc_module_name &nm)
     tlm_bind(m_bus, m_bram, "in", bram);
     tlm_bind(m_bus, m_plic, "in", addr_plic);
     tlm_bind(m_bus, m_uart0, "in", addr_uart0);
+    tlm_bind(m_bus, m_simdev, "in", addr_simdev);
 
     tlm_bind(m_bus, m_core, "insn");
     tlm_bind(m_bus, m_core, "data");
@@ -36,6 +39,7 @@ system::system(const sc_core::sc_module_name &nm)
     clk_bind(m_clock_cpu, "clk", m_loader, "clk");
     clk_bind(m_clock_cpu, "clk", m_plic, "clk");
     clk_bind(m_clock_cpu, "clk", m_uart0, "clk");
+    clk_bind(m_clock_cpu, "clk", m_simdev, "clk");
 
     gpio_bind(m_reset, "rst", m_core, "rst");
     gpio_bind(m_reset, "rst", m_bus, "rst");
@@ -44,6 +48,7 @@ system::system(const sc_core::sc_module_name &nm)
     gpio_bind(m_reset, "rst", m_loader, "rst");
     gpio_bind(m_reset, "rst", m_plic, "rst");
     gpio_bind(m_reset, "rst", m_uart0, "rst");
+    gpio_bind(m_reset, "rst", m_simdev, "rst");
 
     // Connect the uart irq to the plic (target socket)
     gpio_bind(m_uart0, "irq", m_plic, "irqs", IRQ_UART0);

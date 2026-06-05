@@ -30,7 +30,10 @@ enum : mwr::u64 {
   UART0_HI = UART0_LO + 0x1000 - 1,
 
   PLIC_LO = 0x1000a000,
-  PLIC_HI = PLIC_LO + 0x224FFF -1
+  PLIC_HI = PLIC_LO + 0x224FFF -1,
+
+  SIMDEV_LO = 0x10000000,
+  SIMDEV_HI = SIMDEV_LO + 0x1000 - 1
 };
 
 
@@ -50,6 +53,7 @@ class system : public vcml::system {
   vcml::property<range> addr_uart0;
   vcml::property<range> addr_plic;
   vcml::property<int>   irq_uart0;
+  vcml::property<vcml::range> addr_simdev;
 
   system(const sc_core::sc_module_name &nm);
   virtual ~system();
@@ -69,6 +73,7 @@ class system : public vcml::system {
   // at a controlled pace, not faster than real time.
   vcml::meta::throttle m_throttle;
   vcml::meta::loader   m_loader;
+  vcml::meta::simdev m_simdev;
 
   vcml::generic::clock m_clock_cpu;
   vcml::generic::reset m_reset;
