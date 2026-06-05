@@ -24,7 +24,7 @@ system::system(const sc_core::sc_module_name &nm)
       m_uart_injector("uart_injector"),
       // Inside your top-level SoC class definition: 
       // Inside your top-level SoC constructor initializer list:
-      m_multicore_simdev("multicore_simdev", 2) // Instantiating with 2 cores
+      m_multicore_simdev("multicore_simdev", 1) // Instantiating with 2 cores
 {
 
   tlm_bind(m_bus, m_loader, "insn");
@@ -104,6 +104,8 @@ int system::run()
   vcml::log_info("  duration       : %.9fs", duration);
   vcml::log_info("  runtime        : %.4fs", realtime);
   vcml::log_info("  instructions   : %llu", ninsn);
+  vcml::log_info("  instructions core 0   : %llu", m_core.cycle_count());
+  vcml::log_info("  instructions core 1   : %llu", m_core2.cycle_count());
   vcml::log_info("  sim speed      : %.1f MIPS", mips);
   vcml::log_info("  realtime ratio : %.2f / 1s",
                  realtime == 0.0 ? 0.0 : realtime / duration);

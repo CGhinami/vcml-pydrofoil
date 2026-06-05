@@ -13,6 +13,7 @@ PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name &name, uint64_t hart_
                                                                                       core_arch()
 {
     std::cout << "async has value: " << async << std::endl;
+    std::cout << "async_rate has value: " << async_rate << std::endl;
     SC_HAS_PROCESS(PydrofoilCore);
     SC_THREAD(sysc_memory_thread);
 
