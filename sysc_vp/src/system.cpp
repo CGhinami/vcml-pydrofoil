@@ -24,7 +24,7 @@ system::system(const sc_core::sc_module_name &nm)
       m_uart_injector("uart_injector"),
       // Inside your top-level SoC class definition: 
       // Inside your top-level SoC constructor initializer list:
-      m_multicore_simdev("multicore_simdev", 1) // Instantiating with 2 cores
+      m_multicore_simdev("multicore_simdev", 2) // Instantiating with 2 cores
 {
 
   tlm_bind(m_bus, m_loader, "insn");

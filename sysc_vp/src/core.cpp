@@ -43,6 +43,7 @@ PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name &name, uint64_t hart_
 
     // Load the unique library dynamically using RTLD_LOCAL
     m_pydrofoil_handle = dlmopen(LM_ID_NEWLM, inst_lib.c_str(), RTLD_NOW | RTLD_LOCAL);
+    // m_pydrofoil_handle = dlopen(inst_lib.c_str(), RTLD_NOW | RTLD_LOCAL); // use this for async=false
     VCML_ERROR_ON(!m_pydrofoil_handle, "Could not open unique Pydrofoil library '%s': %s", inst_lib.c_str(), dlerror());
 
     // --- 1. LOAD THE LIBRARY DYNAMICALLY ---
