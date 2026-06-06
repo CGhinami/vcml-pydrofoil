@@ -6,6 +6,7 @@
 #include "vcml/models/riscv/plic.h"
 #include "uart_injector.h"
 #include "multicore_simdev.h"
+#include <filesystem>
 
 /* Eg where the data/instruction mem separation
    could break the simulator:

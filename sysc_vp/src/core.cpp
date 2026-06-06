@@ -3,8 +3,8 @@
 #include "riscv_arch.h"
 #include <dlfcn.h>
 #include <string>
-#include <filesystem>
 #include <unistd.h> // <-- Add this for getpid()
+#include <filesystem>
 
 PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name &name, uint64_t hart_id) : vcml::processor(name, "riscv"),
                                                                                       elf("elf", ""),
@@ -14,19 +14,11 @@ PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name &name, uint64_t hart_
 {
     std::cout << "async has value: " << async << std::endl;
     std::cout << "async_rate has value: " << async_rate << std::endl;
-    SC_HAS_PROCESS(PydrofoilCore);
-    SC_THREAD(sysc_memory_thread);
-
     // --- ISOLATED LIBRARY SETUP ---
     std::string base_lib = "../libpydrofoilcapi_cffi.so";
-
-    // Create a local directory for the isolated libraries instead of /tmp/
-    // This prevents sudo lockouts and keeps relative RPATH dependencies intact!
     std::string isolated_dir = "./isolated_libs";
     std::filesystem::create_directories(isolated_dir);
 
-    // Combine your hart_id idea with the OS Process ID (PID)
-    // Format: ./isolated_libs/libpydrofoil_hart0_pid12345.so
     std::string inst_lib = isolated_dir + "/libpydrofoil_hart" +
                            std::to_string(hart_id) + "_pid" +
                            std::to_string(getpid()) + ".so";
@@ -41,20 +33,9 @@ PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name &name, uint64_t hart_
         VCML_ERROR("Failed to copy library for multicore isolation: %s", e.what());
     }
 
-    // Load the unique library dynamically using RTLD_LOCAL
     m_pydrofoil_handle = dlmopen(LM_ID_NEWLM, inst_lib.c_str(), RTLD_NOW | RTLD_LOCAL);
     // m_pydrofoil_handle = dlopen(inst_lib.c_str(), RTLD_NOW | RTLD_LOCAL); // use this for async=false
     VCML_ERROR_ON(!m_pydrofoil_handle, "Could not open unique Pydrofoil library '%s': %s", inst_lib.c_str(), dlerror());
-
-    // --- 1. LOAD THE LIBRARY DYNAMICALLY ---
-    // RTLD_NOW ensures all functions are resolved immediately
-    // m_pydrofoil_handle = dlopen("libpydrofoilcapi_cffi.so", RTLD_NOW | RTLD_GLOBAL);
-    // VCML_ERROR_ON(!m_pydrofoil_handle, "Could not open Pydrofoil library: %s", dlerror());
-
-    // --- 1. LOAD THE LIBRARY DYNAMICALLY ---
-    // RTLD_NOW ensures all functions are resolved immediately
-    // m_pydrofoil_handle = dlopen("libpydrofoilcapi_cffi.so", RTLD_NOW | RTLD_GLOBAL);
-    // VCML_ERROR_ON(!m_pydrofoil_handle, "Could not open Pydrofoil library: %s", dlerror());
 
     // --- 2. MAP THE FUNCTION POINTERS ---
     m_pydrofoil_set_hartid = (int (*)(void *, uint64_t))dlsym(m_pydrofoil_handle, "pydrofoil_set_hartid");
@@ -328,37 +309,16 @@ void PydrofoilCore::simulate(size_t cycles)
         bool success = false;
         if (memtask.type == MemTask::Read)
         {
-            if (vcml::is_thread())
-            {
-                success = (data.read(memtask.addr, memtask.dest, memtask.size, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE);
-            }
-            else
-            {
-                // mwr::log_info("os thread!");
-                sc_sync_catch_ex([&]()
-                                 { success = (data.read(memtask.addr, memtask.dest, memtask.size, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE); });
-            }
-
-            // memset(memtask.dest,0x297,8); // To be removed once the 0x1000 initial accesses are fixed
+            sc_sync_catch_ex([&](){ success = (data.read(memtask.addr, memtask.dest, memtask.size, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE); });
         }
         else
         {
-            if (vcml::is_thread())
-            {
-                success = (data.write(memtask.addr, &memtask.value, memtask.size, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE);
-            }
-            else
-            {
-                // mwr::log_info("os thread!");
-                sc_sync_catch_ex([&]()
-                                 { success = (data.write(memtask.addr, &memtask.value, memtask.size, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE); });
-            }
+            sc_sync_catch_ex([&](){ success = (data.write(memtask.addr, &memtask.value, memtask.size, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE); });
         }
         if (!success)
             mwr::log_info("Memory access failed with address: %lx", memtask.addr);
 
         memtask.result.set_value(success);
-        // print
     }
 
     size_t current_steps = done.get();
@@ -523,12 +483,6 @@ void PydrofoilCore::end_of_elaboration()
     }
     task_cv.notify_one(); // notify the waiting thread
     done.get();           // Wait for the result
-}
-
-void PydrofoilCore::sysc_memory_thread()
-{
-    /*DO MEM ACCESS */
-    mwr::log_info("Memory access thread");
 }
 
 // #todo

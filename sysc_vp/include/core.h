@@ -103,7 +103,6 @@ public:
     bool read_reg_dbg(size_t regno, void *buf, size_t len) override;
     bool insert_breakpoint(vcml::u64 addr);
     bool remove_breakpoint(vcml::u64 addr);
-    void sysc_memory_thread();
     void sc_sync_catch_ex(std::function<void(void)> job);
 
 private:
