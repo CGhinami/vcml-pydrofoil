@@ -96,10 +96,10 @@ class C:
     def set_hartid(self, hartid):
         try:
             self.cpu.write_register("mhartid", hartid)
-            print(f"[Python] Successfully set mhartid to {hartid}")
+            # print(f"[Python] Successfully set mhartid to {hartid}")
         except Exception as e:
             print(f"[Python Error] Failed to set mhartid: {e}")
-        print(f"hardid in python: {self.cpu.read_register('mhartid')}")
+        # print(f"hardid in python: {self.cpu.read_register('mhartid')}")
 
 @ffi.def_extern()
 def pydrofoil_allocate_cpu(spec, fn):

@@ -8,6 +8,7 @@
 int write_mem(void* cpu, uint64_t address, int size, uint64_t value, void* payload) 
 {
     auto core = reinterpret_cast<PydrofoilCore*>(payload);
+
     PydrofoilCore::MemAccess memtask;
 
     memtask.type = PydrofoilCore::MemTask::Write;

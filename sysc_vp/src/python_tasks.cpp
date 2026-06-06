@@ -55,7 +55,7 @@ auto create_handlers(PydrofoilCore& core) // core == alias of the PydrofoilCore,
                 #endif
                 auto cycles = std::get<size_t>(task.arg);
                 auto n_steps = pydrofoil_cpu_simulate(core.cpu, cycles);
-                //core.n_cycles = core.m_pydrofoil_cpu_cycles(core.cpu);
+                //core.n_cycles = pydrofoil_cpu_cycles(core.cpu);
                 task.result.set_value(n_steps); 
                 core.memtask_cv.notify_one();
             }},

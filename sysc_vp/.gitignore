@@ -7,4 +7,3 @@ benchmark/interrupt_demo/64b/*.cfg
 benchmark/interrupt_demo/32b/*.cfg
 benchmark/*.gdb
 
-
