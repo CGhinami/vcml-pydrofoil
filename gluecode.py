@@ -79,6 +79,7 @@ class C:
     def step(self):
         self.steps += 1
         self.cpu.step()
+        # print(f"[DEBUG Python] self.cpu type: {type(self.cpu)}")
 
     def reset(self):
         if self.rv64:
