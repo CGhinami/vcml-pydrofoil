@@ -65,7 +65,7 @@ def main():
     
     # Generiere einen eindeutigen Dateinamen
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    csv_filename = f"1_elf_static_minimal_{timestamp}.csv"
+    csv_filename = f"fixxx1_elf_static_minimal_{timestamp}.csv"
     
     all_results = []
     

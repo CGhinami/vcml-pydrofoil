@@ -25,14 +25,16 @@ using TaskArg = std::variant
 // enum class: no implicit conversion, name's scoped to enum
 enum class Funct {Init, SetCb, Simulate, GetCycles, WriteReg, ReadReg, FreeCpu, SetVerbosity, SetDMI, SetMIP, SetBrkp, RemoveBrkp, SetHartId};
 
+class PydrofoilCore; // Forward Declaration
 struct PythonTask {
     Funct py_funct;
     TaskArg arg;
-    std::promise<uint64_t> result; // Avoids the burden of sync threads
-};  
+    std::promise<uint64_t> result; 
+    
+    // NEU: Welcher Kern hat diesen Task erstellt?
+    PydrofoilCore* caller_core = nullptr; 
+};
 
-class PydrofoilCore; // The compiler needs to know that PydrofoilCore is a class
-
-auto create_handlers(PydrofoilCore& core)
+auto create_handlers()
     -> std::unordered_map<Funct, std::function<void(PythonTask&)>>;
 

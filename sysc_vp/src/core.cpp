@@ -4,6 +4,11 @@
 #include <string>
 // #include <filesystem>
 // #include <unistd.h> // <-- Add this for getpid()
+std::thread PydrofoilCore::global_python_worker_thread;
+std::queue<PythonTask> PydrofoilCore::global_task_queue;
+std::condition_variable PydrofoilCore::global_task_cv;
+std::mutex PydrofoilCore::global_task_mutex;
+bool PydrofoilCore::global_worker_running = false;
 
 PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name, uint64_t hart_id) : 
     vcml::processor(name,"riscv"),
@@ -22,18 +27,25 @@ PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name, uint64_t hart_
     mwr::log_info("Running with arch: %d bit", 8*core_arch.word_size());
     set_little_endian(); // Otherwise the gdbserver inverts the bytes it reads
 
-    python_worker_thread = std::thread(&PydrofoilCore::python_worker_loop, this);
-
+    {
+        std::lock_guard<std::mutex> lock(global_task_mutex);
+        if (!global_worker_running) {
+            global_python_worker_thread = std::thread(&PydrofoilCore::global_python_worker_loop);
+            global_worker_running = true;
+        }
+    }
+    
     PythonTask task;
     task.py_funct = Funct::Init;
     task.arg = core_type;
+    task.caller_core = this;
     std::future<uint64_t> done = task.result.get_future();
 
     {
-        std::lock_guard lock(task_mutex);
-        task_queue.push(std::move(task));
+        std::lock_guard lock(global_task_mutex);
+        global_task_queue.push(std::move(task));
     }
-    task_cv.notify_one(); // notify the waiting thread
+    global_task_cv.notify_one();; // notify the waiting thread
     done.get(); // Wait for the result
 
     set_verbosity(verbosity.get());
@@ -41,7 +53,6 @@ PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name, uint64_t hart_
 
     for (size_t i = 0; i < core_arch.reg_number(); ++i) 
         define_cpureg_rw(i, core_arch.get_regs_ptr()[i].gdb_name, core_arch.word_size());
-    std::cout << "DEBUG: C++ Constructor for " << name << " has hart_id: " << m_hart_id << " hart_id value is: " << hart_id << std::endl;
 }
 
 
@@ -69,18 +80,40 @@ PydrofoilCore::~PydrofoilCore()
     if(cpu){
         PythonTask task;
         task.py_funct = Funct::FreeCpu;
+        task.caller_core = this; // <-- CRITICAL: Tell Python WHICH cpu to free!
+        
         std::future<uint64_t> done = task.result.get_future();
 
         {
-            std::lock_guard lock(task_mutex);
-            task_queue.push(std::move(task));
-            stop_worker = true;
+            std::lock_guard<std::mutex> lock(global_task_mutex); // Use global mutex
+            global_task_queue.push(std::move(task));             // Use global queue
         }
-        task_cv.notify_one();
-        done.get();
+        global_task_cv.notify_one();;
+        done.get(); // Wait for Python to actually free the memory
     }
 
-    python_worker_thread.join();
+    // REMOVED: stop_worker = true;
+    // REMOVED: python_worker_thread.join();
+}
+
+void PydrofoilCore::shutdown_worker()
+{
+    {
+        std::lock_guard<std::mutex> lock(global_task_mutex);
+        if (!global_worker_running) {
+            return; // Already stopped, nothing to do
+        }
+        // Tell the loop to exit
+        global_worker_running = false; 
+    }
+    
+    // Wake up the worker thread so it evaluates the `!global_worker_running` condition
+    global_task_cv.notify_all(); 
+
+    // Wait for the thread to cleanly exit
+    if (global_python_worker_thread.joinable()) {
+        global_python_worker_thread.join();
+    }
 }
 
 
@@ -95,13 +128,14 @@ void PydrofoilCore::notify_pending_irq(bool set){
     PythonTask task;
     task.py_funct = Funct::SetMIP;
     task.arg = mip_val;
+    task.caller_core = this;
     std::future<uint64_t> done = task.result.get_future();
 
     {
-        std::lock_guard lock(task_mutex);
-        task_queue.push(std::move(task));
+        std::lock_guard lock(global_task_mutex);
+        global_task_queue.push(std::move(task));
     }
-    task_cv.notify_one(); // notify the waiting thread
+    global_task_cv.notify_one();; // notify the waiting thread
     done.get(); // Wait for the result
 }
 
@@ -127,6 +161,7 @@ bool PydrofoilCore::write_reg_dbg(size_t regno, const void* buf, size_t len)
 
     PythonTask task;
     task.py_funct = Funct::WriteReg;
+    task.caller_core = this;
     size_t reg_val;
 
     std::string reg_name = core_arch.get_regs_ptr()[regno].x_name;
@@ -136,10 +171,10 @@ bool PydrofoilCore::write_reg_dbg(size_t regno, const void* buf, size_t len)
     std::future<uint64_t> done = task.result.get_future();
 
     {
-        std::lock_guard lock(task_mutex);
-        task_queue.push(std::move(task));
+        std::lock_guard lock(global_task_mutex);
+        global_task_queue.push(std::move(task));
     }
-    task_cv.notify_one(); // notify the waiting thread
+    global_task_cv.notify_one();; // notify the waiting thread
 
     return done.get(); // Wait for the result
 
@@ -161,13 +196,14 @@ bool PydrofoilCore::read_reg_dbg(size_t regno, void* buf, size_t len)
     PythonTask task;
     task.py_funct = Funct::ReadReg;
     task.arg = reg_name.c_str();
+    task.caller_core = this;
     std::future<uint64_t> done = task.result.get_future();
 
     {
-        std::lock_guard lock(task_mutex);
-        task_queue.push(std::move(task));
+        std::lock_guard lock(global_task_mutex);
+        global_task_queue.push(std::move(task));
     }
-    task_cv.notify_one(); // notify the waiting thread
+    global_task_cv.notify_one();; // notify the waiting thread
 
     uint64_t reg_val = done.get(); // Wait for the result
     std::memcpy(buf, &reg_val, len); // Truncates if sizeof reg_val > word_size (only works with little-endian!)
@@ -190,13 +226,14 @@ void PydrofoilCore::check_for_dmi_regions()
             PythonTask task;
             task.py_funct = Funct::SetDMI;
             task.arg = s;
+            task.caller_core = this;
             std::future<uint64_t> done = task.result.get_future();
 
             {
-                std::lock_guard lock(task_mutex);
-                task_queue.push(std::move(task));
+                std::lock_guard lock(global_task_mutex);
+                global_task_queue.push(std::move(task));
             }
-            task_cv.notify_one(); // notify the waiting thread
+            global_task_cv.notify_one();; // notify the waiting thread
             if(done.get() != 0)
                 mwr::log_info("Setting DMI pointer failed");
         }
@@ -212,18 +249,19 @@ void PydrofoilCore::simulate(size_t cycles)
         notify_pending_irq(is_irq_pending.value());
         is_irq_pending.reset();
     }
-
+    // std::cout << "SIMULATE with hard_i: " << m_hart_id << std::endl;
     PythonTask task;
     task.py_funct = Funct::Simulate;
     task.arg = step ? 1 : cycles;
+    task.caller_core = this;
     std::future<uint64_t> done = task.result.get_future();
 
     {
-        std::lock_guard lock(task_mutex);
-        task_queue.push(std::move(task));
+        std::lock_guard lock(global_task_mutex);
+        global_task_queue.push(std::move(task));
     }
 
-    task_cv.notify_one(); // notify the waiting thread
+    global_task_cv.notify_one();; // notify the waiting thread
     
 
     while(done.wait_for(std::chrono::seconds(0)) != std::future_status::ready){
@@ -287,11 +325,11 @@ bool PydrofoilCore::insert_breakpoint(vcml::u64 addr)
     std::future<uint64_t> done = task.result.get_future();
 
     {
-        std::lock_guard lock(task_mutex);
-        task_queue.push(std::move(task));
+        std::lock_guard lock(global_task_mutex);
+        global_task_queue.push(std::move(task));
     }
    
-    task_cv.notify_one(); // notify the waiting thread
+    global_task_cv.notify_one();; // notify the waiting thread
     return done.get();
 }
 
@@ -301,14 +339,15 @@ bool PydrofoilCore::remove_breakpoint(vcml::u64 addr)
     PythonTask task;
     task.py_funct = Funct::RemoveBrkp;
     task.arg = addr;
+    task.caller_core = this;
     std::future<uint64_t> done = task.result.get_future();
 
     {
-        std::lock_guard lock(task_mutex);
-        task_queue.push(std::move(task));
+        std::lock_guard lock(global_task_mutex);
+        global_task_queue.push(std::move(task));
     }
    
-    task_cv.notify_one(); // notify the waiting thread
+    global_task_cv.notify_one();; // notify the waiting thread
     return done.get();
 }
 
@@ -331,14 +370,15 @@ void PydrofoilCore::reset()
     PythonTask task;
     task.py_funct = Funct::SetHartId;
     task.arg = m_hart_id; // Use the member variable we saved
+    task.caller_core = this;
     std::cout << "DEBUG: Calling set_hartid in reset with hart_id:----------------------------- " << m_hart_id << std::endl;
 
     std::future<uint64_t> done = task.result.get_future();
     {
-        std::lock_guard lock(task_mutex);
-        task_queue.push(std::move(task));
+        std::lock_guard lock(global_task_mutex);
+        global_task_queue.push(std::move(task));
     }
-    task_cv.notify_one();
+    global_task_cv.notify_one();;
     done.get(); // Wait for confirmation
 }
 
@@ -356,7 +396,7 @@ void PydrofoilCore::set_pc(vcml::u64 value)
         std::lock_guard lock(task_mutex);
         task_queue.push(task);  // Now we're copying a pointer to the struct
     }
-    task_cv.notify_one(); // notify the waiting thread
+    global_task_cv.notify_one();; // notify the waiting thread
 
     {
         std::unique_lock lock(task->done_mutex);
@@ -371,41 +411,40 @@ void PydrofoilCore::set_verbosity(bool value)
     PythonTask task;
     task.py_funct = Funct::SetVerbosity;
     task.arg = (bool)value;
+    task.caller_core = this;
     std::future<uint64_t> done = task.result.get_future();
 
     {
-        std::lock_guard lock(task_mutex);
-        task_queue.push(std::move(task));
+        std::lock_guard lock(global_task_mutex);
+        global_task_queue.push(std::move(task));
     }
-    task_cv.notify_one(); // notify the waiting thread
+    global_task_cv.notify_one();; // notify the waiting thread
 
     done.get(); // Wait for the result
 }
 
-
-void PydrofoilCore::python_worker_loop(){
-    std::unordered_map<Funct, std::function<void(PythonTask&)>> handlers = create_handlers(*this);
+void PydrofoilCore::global_python_worker_loop() {
+    // Da create_handlers() kein Argument mehr braucht, rufen wir es einfach auf
+    std::unordered_map<Funct, std::function<void(PythonTask&)>> handlers = create_handlers();
 
     while(true) {
         PythonTask task;
 
-        {   // We need unique_lock because:
-            // 1. we need wait()
-            // 2. wait can temporarely release the lock and reacquire once notified
-            // Neither 1. nor 2. are supported by lock_guard
-            std::unique_lock<std::mutex> lock(task_mutex); 
-            task_cv.wait(lock, [this]{ return !task_queue.empty() || stop_worker;});
-
-            if (stop_worker && task_queue.empty())
+        {   
+            std::unique_lock<std::mutex> lock(global_task_mutex); 
+            // Warte, bis die globale Queue nicht leer ist ODER der Worker gestoppt werden soll
+            global_task_cv.wait(lock, []{ return !global_task_queue.empty() || !global_worker_running; });
+            if (!global_worker_running && global_task_queue.empty())
                 break;
             
-            task = std::move(task_queue.front()); // PythonTask has std::promise, not copyable!
-            task_queue.pop();                      // pop: reason not to use eg vectors
-        }   // --> lock released (out of scope)
+            task = std::move(global_task_queue.front()); 
+            global_task_queue.pop();                      
+        } 
 
         auto it = handlers.find(task.py_funct);
-        if(it != handlers.end())
-            it->second(task);
+        if(it != handlers.end()) {
+            it->second(task); // Hier wird das entsprechende Lambda aufgerufen!
+        }
     }
 }
 
@@ -416,12 +455,14 @@ void PydrofoilCore::end_of_elaboration()
 
     PythonTask task;
     task.py_funct = Funct::SetCb;
+    task.caller_core = this;
     std::future<uint64_t> done = task.result.get_future();
+    
 
     {
-        std::lock_guard lock(task_mutex);
-        task_queue.push(std::move(task));
+        std::lock_guard lock(global_task_mutex);
+        global_task_queue.push(std::move(task));
     }
-    task_cv.notify_one(); // notify the waiting thread
+    global_task_cv.notify_one();; // notify the waiting thread
     done.get(); // Wait for the result
 }

@@ -78,6 +78,7 @@ class PydrofoilCore : public vcml::processor{
         bool read_reg_dbg(size_t regno, void* buf, size_t len) override;
         bool insert_breakpoint(vcml::u64 addr);
         bool remove_breakpoint(vcml::u64 addr);
+        static void shutdown_worker();
 
     private:
         bool step = true; // For the first execution we want just 1 instruction to run
@@ -87,12 +88,16 @@ class PydrofoilCore : public vcml::processor{
 
         void notify_pending_irq(bool set);
 
-        std::thread python_worker_thread;
-        mutable std::queue<PythonTask> task_queue; // mutable is needed to relax the const-correctness compiler check
-                                                   // should only have one element
-        mutable std::condition_variable task_cv;
-        mutable std::mutex task_mutex;
-        bool stop_worker = false;
+        static std::thread global_python_worker_thread;
+        static std::queue<PythonTask> global_task_queue;
+        static std::condition_variable global_task_cv;
+        static std::mutex global_task_mutex;
+        static bool global_worker_running;
+        
+        // Der Loop ist jetzt auch eine statische Funktion (gehört zur Klasse, nicht zum Objekt)
+        static void global_python_worker_loop();
+        // mutable std::condition_variable task_cv;
+
 
         void set_verbosity(bool value); 
         void python_worker_loop();
