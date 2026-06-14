@@ -7,7 +7,7 @@ import time
 from datetime import datetime
 
 # Konfiguration
-NUM_RUNS = 1
+NUM_RUNS = 10
 LAUNCH_SCRIPT = "./launch.sh"
 
 def run_benchmark(cfg_file, run_index):
@@ -65,7 +65,7 @@ def main():
     
     # Generiere einen eindeutigen Dateinamen
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    csv_filename = f"bench_results_{timestamp}.csv"
+    csv_filename = f"2elfs_async_rate10__q1000_{timestamp}.csv"
     
     all_results = []
     

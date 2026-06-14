@@ -35,7 +35,7 @@ public:
     reg<u32> core_done; // Offset: 0x00
     reg<u32> sout0;     // Offset: 0x08 <-- NEU: Register Core 0
     reg<u32> sout1;     // Offset: 0x0C <-- NEU: Register Core 1
-
+    vcml::property<bool> write_to_file;
     // TLM Socket for the bus
     tlm_target_socket in;
 
