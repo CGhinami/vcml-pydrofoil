@@ -1,18 +1,24 @@
 #include "system.h"
 #include "pydrofoilcapi.h"
-#include "core.h" // <-- WICHTIG: Damit sc_main PydrofoilCore kennt
+#include "core.h" 
 
 extern "C" int sc_main(int argc, char **argv) {
+    int exit_code = 0;
 
-    class system system("system");
+    // Wir öffnen einen künstlichen Scope (Sichtbarkeitsbereich)
+    {
+        class system system("system");
 
-    // 1. Starte die Simulation. Das Programm bleibt hier stehen, bis die Simulation vorbei ist.
-    int exit_code = system.run();
+        // Simulation läuft...
+        exit_code = system.run();
+        
+    } // <--- WICHTIG: Hier geht "system" out of scope! 
+      // C++ ruft JETZT alle Destruktoren (~PydrofoilCore) auf.
+      // Der Python-Worker lebt noch und kann "FreeCpu" sauber abarbeiten!
 
-    // 2. Die Simulation ist beendet! 
-    // Jetzt sagen wir dem globalen Python-Worker-Thread, dass er sich beenden soll.
+    // Jetzt, wo alle Kerne zerstört und aus Python abgemeldet sind,
+    // können wir den globalen Thread sicher beenden.
     PydrofoilCore::shutdown_worker();
 
-    // 3. SystemC sauber beenden
     return exit_code;
 }

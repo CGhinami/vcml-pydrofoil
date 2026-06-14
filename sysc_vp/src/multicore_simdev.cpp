@@ -46,6 +46,7 @@ void multicore_simdev::write_sout1(u32 val) {
 
 multicore_simdev::multicore_simdev(const sc_module_name& nm, unsigned int num_cores):
     peripheral(nm),
+    write_to_file("write_to_file", true),
     m_done_mask(0),
     m_num_cores(num_cores), 
     core_done("core_done", 0x00, 0),
@@ -65,8 +66,10 @@ multicore_simdev::multicore_simdev(const sc_module_name& nm, unsigned int num_co
 
     // <-- NEU: Öffne die beiden Textdateien
     // std::ios::trunc sorgt dafür, dass alte Logs bei Neustart gelöscht werden
-    m_out_core0.open("core0_output.txt", std::ios::out | std::ios::trunc);
-    m_out_core1.open("core1_output.txt", std::ios::out | std::ios::trunc);
+    if (write_to_file) {
+        m_out_core0.open("core0_output.txt", std::ios::out | std::ios::trunc);
+        m_out_core1.open("core1_output.txt", std::ios::out | std::ios::trunc);
+    }
 }
 
 multicore_simdev::~multicore_simdev() {
