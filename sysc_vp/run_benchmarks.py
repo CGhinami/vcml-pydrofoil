@@ -17,17 +17,15 @@ def run_benchmark(cfg_file, run_index):
     result = subprocess.run([LAUNCH_SCRIPT, cfg_file], capture_output=True, text=True)
     
     output = result.stdout + result.stderr
-    print(output)
 
     if result.returncode != 0:
         print(f"WARNUNG: Lauf {run_index} endete mit Fehlercode {result.returncode}!")
     
     # Reguläre Ausdrücke (Regex), um die Werte aus den vcml::log_info Zeilen zu fischen.
-    # Sie suchen nach dem Text und fangen die Zahl (mit Punkt oder Komma) ein.
     regex_duration = r"duration\s*:\s*([\d\.]+)s"
     regex_runtime  = r"runtime\s*:\s*([\d\.]+)s"
-    regex_core0    = r"cycles core 0\s*:\s*(\d+)"
-    regex_core1    = r"cycles core 1\s*:\s*(\d+)"
+    regex_core0    = r"instructions core 0\s*:\s*(\d+)" # Updated based on your previous logs
+    regex_core1    = r"instructions core 1\s*:\s*(\d+)" # Updated based on your previous logs
     regex_mips     = r"sim speed\s*:\s*([\d\.]+)\s*MIPS"
     regex_ratio    = r"realtime ratio\s*:\s*([\d\.]+)\s*/"
 
@@ -65,7 +63,7 @@ def main():
     
     # Generiere einen eindeutigen Dateinamen
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    csv_filename = f"2_100q_elf_static_min{timestamp}.csv"
+    csv_filename = f"results/2_100q_elf_static.csv"
     
     all_results = []
     
@@ -74,8 +72,27 @@ def main():
         all_results.append(data)
         time.sleep(1) # Kurze Pause (Cooldown für die CPU)
         
+    # --- STATISTICS CALCULATION ---
+    # Finde alle Schlüssel, die nummerische Daten enthalten (alles außer "run")
+    stats_keys = [k for k in all_results[0].keys() if k != "run"]
+    
+    avg_row = {"run": "AVG"}
+    min_row = {"run": "MIN"}
+    max_row = {"run": "MAX"}
+    
+    for key in stats_keys:
+        # Filtere None Werte heraus (falls ein Regex mal fehlschlägt)
+        values = [r[key] for r in all_results if r[key] is not None]
+        if values:
+            avg_row[key] = round(sum(values) / len(values), 4)
+            min_row[key] = min(values)
+            max_row[key] = max(values)
+        else:
+            avg_row[key] = None
+            min_row[key] = None
+            max_row[key] = None
+            
     # Schreibe CSV
-    # Verwende die Keys des ersten Dictionarys als Spaltenüberschriften
     fieldnames = all_results[0].keys()
     
     with open(csv_filename, mode='w', newline='') as csv_file:
@@ -85,13 +102,20 @@ def main():
         for row in all_results:
             writer.writerow(row)
             
+        # Füge eine leere Zeile als Trenner hinzu, dann die Statistiken
+        writer.writerow({k: "" for k in fieldnames})
+        writer.writerow(avg_row)
+        writer.writerow(min_row)
+        writer.writerow(max_row)
+            
     print(f"\n✅ Alle {NUM_RUNS} Läufe beendet. Ergebnisse gespeichert in: {csv_filename}")
     
-    # Kurze Vorschau/Statistik
-    runtimes = [r["runtime_s"] for r in all_results if r["runtime_s"] is not None]
-    if runtimes:
-        avg_runtime = sum(runtimes) / len(runtimes)
-        print(f"📊 Durchschnittliche Runtime: {avg_runtime:.4f}s")
+    # --- TERMINAL SUMMARY ---
+    print("\n📊 ZUSAMMENFASSUNG DER STATISTIKEN:")
+    print("-" * 50)
+    for key in stats_keys:
+        if avg_row[key] is not None:
+            print(f"{key.ljust(20)} | AVG: {avg_row[key]:<10} | MIN: {min_row[key]:<10} | MAX: {max_row[key]:<10}")
 
 if __name__ == "__main__":
     main()

@@ -90,13 +90,13 @@ int system::run() {
     int result = vcml::system::run();
     double realtime = mwr::timestamp() - simstart;
     double duration = sc_core::sc_time_stamp().to_seconds();
-    vcml::u64 ninsn = m_core.cycle_count();
+    vcml::u64 ninsn = m_core.cycle_count() + m_core2.cycle_count();
 
     double mips = realtime == 0.0 ? 0.0 : ninsn / realtime / 1e6;
     vcml::log_info("total");
     vcml::log_info("  duration       : %.9fs", duration);
     vcml::log_info("  runtime        : %.4fs", realtime);
-    vcml::log_info("  instructions core 0   : %llu", ninsn);
+    vcml::log_info("  instructions core 0   : %llu", m_core.cycle_count());
     vcml::log_info("  instructions core 1   : %llu", m_core2.cycle_count());
     vcml::log_info("  sim speed      : %.1f MIPS", mips);
     vcml::log_info("  realtime ratio : %.2f / 1s",
