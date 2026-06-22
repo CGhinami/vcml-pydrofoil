@@ -9,7 +9,7 @@ all: sysc_vp
 # 3rd arg (the "else"): empty
 sysc_vp:
 	@echo "Building the SystemC VP"
-	@mkdir -p build && cd build && cmake -DCMAKE_BUILD_TYPE=Debug $(if $(PROFILING),-DCMAKE_CXX_FLAGS=-DPROFILING=$(PROFILING)) .. && make -j24
+	@mkdir -p build && cd build && cmake -DCMAKE_BUILD_TYPE=Release $(if $(PROFILING),-DCMAKE_CXX_FLAGS=-DPROFILING=$(PROFILING)) .. && make -j24
 
 clean:
 	@echo "Cleaning the build directory"

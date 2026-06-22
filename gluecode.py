@@ -93,6 +93,15 @@ class C:
         self.steps = 0
         self.cpu._set_sail_memory_bounds(0x00000000, 0x4000000000)
         self.set_verbosity(self.verbosity)
+        print("\n--- self.cpu.lowlevel Members and Methods ---")
+        if hasattr(self.cpu, 'lowlevel'):
+            for item in dir(self.cpu.lowlevel):
+                # Filtere die Standard-Python-Methoden (__x__) raus, um die Liste übersichtlich zu halten
+                if not item.startswith("__"):
+                    print(item)
+        else:
+            print("Kein 'lowlevel' Objekt gefunden!")
+        print("---------------------------------------------\n")
      
     def set_hartid(self, hartid):
         try:
