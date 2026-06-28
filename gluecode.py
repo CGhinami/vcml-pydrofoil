@@ -80,6 +80,19 @@ class C:
         self.steps += 1
         self.cpu.step()
 
+    # def reset(self):
+    #     if self.rv64:
+    #         cls = _pydrofoil.RISCV64
+    #     else:
+    #         cls = _pydrofoil.RISCV32
+    #     if self.callbacks:
+    #         self.cpu = cls(self.arg, callbacks=self.callbacks)
+    #     else:
+    #         self.cpu = cls(self.arg)
+    #     self.steps = 0
+    #     self.cpu._set_sail_memory_bounds(0x00000000, 0x4000000000)
+    #     self.set_verbosity(self.verbosity)
+
     def reset(self):
         if self.rv64:
             cls = _pydrofoil.RISCV64
@@ -89,9 +102,11 @@ class C:
             self.cpu = cls(self.arg, callbacks=self.callbacks)
         else:
             self.cpu = cls(self.arg)
+        self.cpu._set_htif_tohost(0x900F0000)
         self.steps = 0
         self.cpu._set_sail_memory_bounds(0x00000000, 0x4000000000)
         self.set_verbosity(self.verbosity)
+
 
 @ffi.def_extern()
 def pydrofoil_allocate_cpu(spec, fn):
