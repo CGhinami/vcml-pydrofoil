@@ -1,0 +1,14 @@
+# 1. Bestätigungs-Dialoge abschalten
+set confirm off
+
+# 2. Die korrekte Architektur
+set architecture riscv:rv64
+
+# 3. Verbinden
+target remote :5555
+
+# 4. Breakpoint in LINUX setzen
+hbreak start_kernel
+
+# 5. Laufen lassen!
+c

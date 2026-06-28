@@ -18,6 +18,7 @@ add-symbol-file /home/seibt/thesis/avp64_sw/linux/BUILD/buildroot/output/linux/b
 
 # 5. Hardware-Breakpoint direkt auf die Absturz-Adresse setzen
 hbreak *0x80013F06
+
 set substitute-path /app/build /home/seibt/thesis/avp64_sw/linux/BUILD
 
 # 6. Lass den Simulator bis genau dorthin laufen

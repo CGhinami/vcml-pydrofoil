@@ -69,7 +69,12 @@ system::system(const sc_core::sc_module_name &nm)
 
     // Connect the core irq to the plic (init socket)
     //gpio_bind(m_core, "irq", m_plic, "irqt"); // is this correct? does gpio bind work with arrays?
-    m_plic.irqt[0].bind(m_core.irq[0]);
+    // Context 0 (M-Mode) an den Machine-External-Interrupt-Pin (11) klemmen
+    m_plic.irqt[0].bind(m_core.irq[MEIP]); 
+
+    // Context 1 (S-Mode) an den Supervisor-External-Interrupt-Pin (9) klemmen
+    // (Das zwingt VCML dazu, die Register für Context 1 bei 0x2080 anzulegen!)
+    m_plic.irqt[1].bind(m_core.irq[SEIP]);
     m_clint.irq_sw[0].bind(m_core.irq[MSIP]); 
     m_clint.irq_timer[0].bind(m_core.irq[MTIP]);
 

@@ -85,7 +85,7 @@ class system : public vcml::system {
   vcml::generic::clock m_clock_cpu;
   vcml::generic::reset m_reset;
   
-  vcml::serial::nrf51  m_uart0;
+  vcml::serial::uart8250  m_uart0;
   vcml::riscv::plic    m_plic;
   UartInjector         m_uart_injector;
   vcml::riscv::clint   m_clint;
