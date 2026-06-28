@@ -18,7 +18,7 @@
 */
 
 enum : mwr::u64 {
-  SRAM_SZ = 128 * mwr::KiB,
+  SRAM_SZ = 256 * mwr::MiB,
   SRAM_LO = 0x80000000,
   SRAM_HI = SRAM_LO + SRAM_SZ - 1,
 
@@ -30,12 +30,19 @@ enum : mwr::u64 {
   UART0_HI = UART0_LO + 0x1000 - 1,
 
   PLIC_LO = 0x1000a000,
-  PLIC_HI = PLIC_LO + 0x224FFF -1
+  PLIC_HI = PLIC_LO + 0x224FFF -1,
+
+  CLINT_LO = 0x15000000,
+  CLINT_HI = CLINT_LO + 0x10000 - 1, // 64KB large
+
+  SDHCI_LO = 0x15020000,
+  SDHCI_HI = SDHCI_LO + 0x1000 - 1
 };
 
 
 enum : mwr::u64 {
-  IRQ_UART0 = 5
+  IRQ_UART0 = 5,
+  IRQ_SDHCI = 6
 };
 
 class system : public vcml::system {
@@ -49,7 +56,12 @@ class system : public vcml::system {
   vcml::property<range> bram;
   vcml::property<range> addr_uart0;
   vcml::property<range> addr_plic;
+  vcml::property<range> addr_clint;
+  vcml::property<range> addr_sdhci;
   vcml::property<int>   irq_uart0;
+  vcml::property<int>   irq_sdhci;
+  
+  
 
   system(const sc_core::sc_module_name &nm);
   virtual ~system();
@@ -76,6 +88,9 @@ class system : public vcml::system {
   vcml::serial::nrf51  m_uart0;
   vcml::riscv::plic    m_plic;
   UartInjector         m_uart_injector;
+  vcml::riscv::clint   m_clint;
+  vcml::sd::card m_sdcard;
+  vcml::sd::sdhci m_sdhci;
 
   void inject_data(sc_core::sc_time period);
 };
