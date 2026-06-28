@@ -23,3 +23,5 @@ set substitute-path /app/build /home/seibt/thesis/avp64_sw/linux/BUILD
 # 6. Lass den Simulator bis genau dorthin laufen
 # continue
 
+# to start: gdb-multiarch -x gdb_cmd.gdb /home/seibt/thesis/avp64_sw/linux/BUILD/buildroot/output/linux/build/opensbi-1.7/build/platform/generic/firmware/fw_jump.elf
+
