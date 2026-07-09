@@ -2,3 +2,4 @@ pypy-pydrofoil-scripting-experimental/*
 testplugin
 _pydrofoilcapi_cffi.*
 sysc_vp/log.txt
+sysc_vp/log_nohtif.txt

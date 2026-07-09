@@ -91,6 +91,7 @@ class system : public vcml::system {
   vcml::riscv::clint   m_clint;
   vcml::sd::card m_sdcard;
   vcml::sd::sdhci m_sdhci;
+  vcml::serial::terminal m_term0;
 
   void inject_data(sc_core::sc_time period);
 };

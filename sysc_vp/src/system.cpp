@@ -23,6 +23,7 @@ system::system(const sc_core::sc_module_name &nm)
     m_clint("clint"),
     m_sdcard("sdcard"),
     m_sdhci("sdhci"),
+    m_term0("term0"),
     m_uart_injector("uart_injector") {
 
     tlm_bind(m_bus, m_loader, "insn");
@@ -67,6 +68,9 @@ system::system(const sc_core::sc_module_name &nm)
     gpio_bind(m_uart0, "irq", m_plic, "irqs", IRQ_UART0);
     gpio_bind(m_sdhci, "irq", m_plic, "irqs", IRQ_SDHCI);
 
+    serial_bind(m_term0, "serial_tx", m_uart0, "serial_rx");
+    serial_bind(m_term0, "serial_rx", m_uart0, "serial_tx");
+
     // Connect the core irq to the plic (init socket)
     //gpio_bind(m_core, "irq", m_plic, "irqt"); // is this correct? does gpio bind work with arrays?
     // Context 0 (M-Mode) an den Machine-External-Interrupt-Pin (11) klemmen
@@ -78,8 +82,9 @@ system::system(const sc_core::sc_module_name &nm)
     m_clint.irq_sw[0].bind(m_core.irq[MSIP]); 
     m_clint.irq_timer[0].bind(m_core.irq[MTIP]);
 
-    m_uart_injector.uart_tx.bind(m_uart0.serial_rx);
-    m_uart0.serial_tx.stub();
+    // m_uart_injector.uart_tx.bind(m_uart0.serial_rx);
+    m_uart_injector.uart_tx.stub();
+    // m_uart0.serial_tx.stub();
 }
 
 system::~system() {
