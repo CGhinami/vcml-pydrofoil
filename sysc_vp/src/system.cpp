@@ -11,8 +11,8 @@
 
 namespace virtual_platform {
 
-system::system(const sc_core::sc_module_name &nm)
-    : vcml::system(nm), 
+system::system(const sc_core::sc_module_name& nm):
+    vcml::system(nm),
     ram("ram", {SRAM_LO, SRAM_HI}),
     bram("bram", {BOOT_LO, BOOT_HI}),
     addr_uart0("addr_uart0", {UART0_LO, UART0_HI}),
@@ -30,8 +30,8 @@ system::system(const sc_core::sc_module_name &nm)
     m_uart0("uart0"),
     m_plic("plic"),
     m_term("term"),
-    m_simdev("simdev") {
-
+    m_simdev("simdev")
+{
     tlm_bind(m_bus, m_loader, "insn");
     tlm_bind(m_bus, m_loader, "data");
     tlm_bind(m_bus, m_ram, "in", ram);
@@ -65,19 +65,20 @@ system::system(const sc_core::sc_module_name &nm)
     gpio_bind(m_uart0, "irq", m_plic, "irqs", IRQ_UART0);
 
     // Connect the core irq to the plic (init socket)
-    //gpio_bind(m_core, "irq", m_plic, "irqt"); // is this correct? does gpio bind work with arrays?
+    // gpio_bind(m_core, "irq", m_plic, "irqt"); // is this correct? does gpio bind work with arrays?
     m_plic.irqt[0].bind(m_core.irq[0]);
 
     serial_bind(m_term, "serial_tx", m_uart0, "serial_rx");
     serial_bind(m_term, "serial_rx", m_uart0, "serial_tx");
 }
 
-system::~system() {
-  // nothing to do
+system::~system()
+{
+    // nothing to do
 }
 
-
-int system::run() {
+int system::run()
+{
     double simstart = mwr::timestamp();
     int result = vcml::system::run();
     double realtime = mwr::timestamp() - simstart;
@@ -90,10 +91,9 @@ int system::run() {
     vcml::log_info("  runtime        : %.4fs", realtime);
     vcml::log_info("  instructions   : %llu", ninsn);
     vcml::log_info("  sim speed      : %.1f MIPS", mips);
-    vcml::log_info("  realtime ratio : %.2f / 1s",
-                   realtime == 0.0 ? 0.0 : realtime / duration);
+    vcml::log_info("  realtime ratio : %.2f / 1s", realtime == 0.0 ? 0.0 : realtime / duration);
 
     return result;
 }
 
-} // virtual_platform
+} // namespace virtual_platform

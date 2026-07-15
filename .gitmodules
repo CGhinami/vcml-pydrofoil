@@ -1,0 +1,9 @@
+[submodule "sysc_vp/deps/systemc"]
+	path = sysc_vp/deps/systemc
+	url = https://github.com/machineware-gmbh/systemc.git
+[submodule "sysc_vp/deps/vcml"]
+	path = sysc_vp/deps/vcml
+	url = https://github.com/machineware-gmbh/vcml.git
+[submodule "sysc_vp/deps/mwr"]
+	path = sysc_vp/deps/mwr
+	url = https://github.com/machineware-gmbh/mwr.git

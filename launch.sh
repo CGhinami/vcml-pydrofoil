@@ -43,7 +43,7 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:"$PYDROFOIL_BIN_DIR"
 
 if [[ "$DEBUG" == "1" ]]; then
     echo "Running in debug mode (gdb)…"
-    if [[ ! -f "$VP_BENCHMARK"/gdb_vp_cmd.gdb ]]; then 
+    if [[ ! -f "$VP_BENCHMARK"/gdb_vp_cmd.gdb ]]; then
         gdb --args "$VP_BINARY" -f "$VP_CFG"
     else
         gdb -x "$VP_BENCHMARK"/gdb_vp_cmd.gdb --args "$VP_BINARY" -f "$VP_CFG"

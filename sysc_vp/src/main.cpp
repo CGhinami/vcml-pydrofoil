@@ -10,9 +10,9 @@
 #include "system.h"
 #include "pydrofoilcapi.h"
 
-extern "C" int sc_main(int argc, char **argv) {
+extern "C" int sc_main(int argc, char** argv)
+{
+    class virtual_platform::system system("system");
 
-  class virtual_platform::system system("system");
-
-  return system.run();
+    return system.run();
 }

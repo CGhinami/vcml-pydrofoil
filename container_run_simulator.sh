@@ -1,33 +1,38 @@
 #!/usr/bin/env bash
 set -e
 
-# If user specified a preference, try it. Use docker otherwise
-CONTAINER_PROGRAM=${1:-docker}
-CFG_FILE="$2"
+# Default container program
+CONTAINER_PROGRAM="docker"
+CFG_FILE=""
+
+# Check if the first argument is explicitly 'docker' or 'podman'
+if [[ "$1" == "docker" || "$1" == "podman" ]]; then
+    CONTAINER_PROGRAM="$1"
+    CFG_FILE="$2"
+else
+    # If it's not a container program, treat the first argument as the config file
+    CFG_FILE="$1"
+fi
 
 if [[ "$CONTAINER_PROGRAM" == "docker" ]]; then
 
 	if command -v docker &> /dev/null; then
 		CONTAINER_PROGRAM_FLAGS="--user $(id -u):$(id -g)"
 		echo "Using docker"
-	else 
+	else
 		echo "Docker was selected but it is not installed. Exiting..."
 		exit 1
 	fi
-		
+
 elif [[ "$CONTAINER_PROGRAM" == "podman" ]]; then
 
 	if command -v podman &> /dev/null; then
 		CONTAINER_PROGRAM_FLAGS="--userns keep-id"
 		echo "Using podman"
-	else 
+	else
 		echo "Podman was selected but it is not installed. Exiting..."
 		exit 1
 	fi
-else 
-	echo "Invalid containerization option selected. Exiting..."
-	echo "Usage: $0 [docker|podman]"
-	exit 1
 fi
 
 IMAGE_NAME="vcml-pydrofoil:latest"

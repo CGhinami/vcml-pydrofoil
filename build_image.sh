@@ -12,20 +12,20 @@ if [[ "$CONTAINER_PROGRAM" == "docker" ]]; then
 
 	if command -v docker &> /dev/null; then
 		echo "Using docker"
-	else 
+	else
 		echo "Docker was selected but it is not installed. Exiting..."
 		exit 1
 	fi
-		
+
 elif [[ "$CONTAINER_PROGRAM" == "podman" ]]; then
 
 	if command -v podman &> /dev/null; then
 		echo "Using podman"
-	else 
+	else
 		echo "Podman was selected but it is not installed. Exiting..."
 		exit 1
 	fi
-else 
+else
 	echo "Invalid containerization option selected. Exiting..."
 	echo "Usage: $0 [docker|podman]"
 	exit 1

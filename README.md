@@ -11,10 +11,10 @@ The two parts, Pydrofoil and SystemC-TLM, communicate through a C API.
    ```bash
    cd ~/vcml-pydrofoil
    # To run it with podman
-   ./container_run_simulation.sh podman 
+   ./container_run_simulation.sh podman
    # To run it with docker
    ./container_run_simulation.sh # or
-   ./container_run_simulation.sh docker 
+   ./container_run_simulation.sh docker
    ```
     The run will by default run the [64-bit addi riscv](benchmark/rv64_addi.elf) example. If you want to run a different application, pass the configuration file as an input to the run script:
     ```bash
@@ -22,7 +22,7 @@ The two parts, Pydrofoil and SystemC-TLM, communicate through a C API.
    ```
     See below more details on how to write your own configuration file and how to run your custom application.
 
-## Repo Organization 
+## Repo Organization
 
 | Directory | Description |
 | --------- | ----------- |
@@ -30,7 +30,7 @@ The two parts, Pydrofoil and SystemC-TLM, communicate through a C API.
 | [sysc_vp](sysc_vp) | The SystemC wrapper that uses the Pydrofoil emulator. |
 
 
-## Basics on how to configure the VP 
+## Basics on how to configure the VP
 
 The VP's configuration file allows you to modify some properties about the VP without the need to recompile the project. [This](benchmark/riscv64_ex.cfg) is an example of a configuration file. In the table below, we report some useful properties that can be set in the file:
 
@@ -51,10 +51,12 @@ The VP's configuration file allows you to modify some properties about the VP wi
 
 ## Build the project from source
 
-1) Download the Pydrofoil-PyPy plugin from [this link](https://github.com/pydrofoil/pydrofoil/actions/workflows/plugin.yml) and untar it. The framework expects this to be inside the `vcml-pydrofoil` project directory.
+1) Clone this repository with the `--recursive` flag to initialize the submodules.
+
+2) Download the Pydrofoil-PyPy plugin from [this link](https://github.com/pydrofoil/pydrofoil/actions/workflows/plugin.yml) and untar it. The framework expects this to be inside the `vcml-pydrofoil` project directory.
 
 
-2) Build the project
+3) Build the project
 
     -**With** container support:
 
@@ -71,18 +73,18 @@ The VP's configuration file allows you to modify some properties about the VP wi
     - Compile a test C file ([testmain.c](testmain.c)) that uses the API functions<br/>
     - Link both C files with the PyPy runtime library (*libpypy3.11-c.so*)<br/>
     - Build the SystemC environment <br/>
-   
+
     -**Without** container support:
     ```bash
     cd ~/vcml-pydrofoil
     ./build_sim.sh
     ```
 
-## Run the simulator 
+## Run the simulator
 
 Run [container_run_simulator.sh](container_run_simulator.sh) to run **with** container support. This will use docker by default, specify podman to use it.
 
-Run [launch.sh](launch.sh) to run **without** container support. 
+Run [launch.sh](launch.sh) to run **without** container support.
 
 Specify the configuration file if you do not want to run the default [riscv64 example](benchmark/riscv64_ex.cfg):
 ```bash
@@ -97,7 +99,7 @@ cd ~/vcml-pydrofoil
 The simulator supports RTOS and bare-metal applications. Linux applications are still under test. The current simulator has only the UART peripheral connected, but the RISCV-compatible peripherals from [VCML](https://github.com/machineware-gmbh/vcml) are supported. To add them, modify the files where the peripherals are instantiated and connected ([system.cpp](sysc_vp/src/system.cpp) and [system.h](sysc_vp/include/system.h)).
 
 
-## Profile the SystemC-TLM2.0 
+## Profile the SystemC-TLM2.0
 Requirements: *perf* and *hotspot*
 
 If interested in the performance of the SystemC-TLM side, it is possible to use perf.<br/>
