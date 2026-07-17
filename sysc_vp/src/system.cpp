@@ -105,7 +105,7 @@ void system::inject_data(sc_core::sc_time period)
 
 
 int system::run() {
-    inject_data(sc_core::sc_time(0.05, sc_core::SC_MS));
+    // inject_data(sc_core::sc_time(0.05, sc_core::SC_MS));
     double simstart = mwr::timestamp();
     int result = vcml::system::run();
     double realtime = mwr::timestamp() - simstart;
