@@ -18,7 +18,7 @@
 namespace virtual_platform {
 
 enum : mwr::u64 {
-    SRAM_SZ = 128 * mwr::KiB,
+    SRAM_SZ = 256 * mwr::KiB,
     SRAM_LO = 0x80000000,
     SRAM_HI = SRAM_LO + SRAM_SZ - 1,
 
