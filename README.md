@@ -48,6 +48,9 @@ The VP's configuration file allows you to modify some properties about the VP wi
 | `system.term.backends` | `tui`, `file`, `tcp:<tcp port>`, `null` | The terminal backend. When `file` is selected, the data to be sent must be available in a file named *system.term.rx*. The UART sends the data to the *system.term.tx* file. |
 | `system.duration` |  Integer values with suffixes s, ms, us or ns | simulation duration. Simulation will stop automatically once this time-stamp is reached. If you want to simulate infinitely, do not use this in the file. |
 
+*Note:*
+The `simulation duration` is not the real-world (wall-clock) time. It represent the virtual, simulation time. For example, with a `system.quantum` parameter set at 100ns, our simulator can achieve up to 4MIPS. If the `system.frequency` is set at 1GHz, having a `system.duration` of 10 seconds would mean simulating for around 40 minutes of wall-clock time.
+
 
 ## Build the project from source
 
