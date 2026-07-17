@@ -245,7 +245,9 @@ void PydrofoilCore::simulate(size_t cycles)
     }
 
     size_t current_steps = done.get();
-    if(!step && current_steps < cycles)
+    bool brkpt_hit = current_steps > 0 && current_steps < cycles;
+
+    if(!step && brkpt_hit)
         handle_breakpoint_hit();
 
     n_cycles += current_steps;
