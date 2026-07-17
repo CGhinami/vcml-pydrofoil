@@ -1,0 +1,56 @@
+name: Docker Image CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6 
+        with:
+          submodules: recursive
+
+      - name: Download latest artifact from pydrofoil
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Finds the latest successful run ID for plugin.yml on the main branch
+          RUN_ID=$(gh run list --repo pydrofoil/pydrofoil --workflow plugin.yml --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId')
+          
+          if [ -z "$RUN_ID" ] || [ "$RUN_ID" = "null" ]; then
+            echo "Error: Could not find a successful run for plugin.yml on the main branch."
+            exit 1
+          fi
+          
+          gh run download $RUN_ID --repo pydrofoil/pydrofoil --name artifact --dir ./tmp-artifact
+          
+          # Extract the actual tarball contents into the directory your script looks for
+          mkdir -p ./pypy-pydrofoil-scripting-experimental
+          tar -xjf ./tmp-artifact/pypy-pydrofoil-scripting-experimental.tar.bz2 -C ./pypy-pydrofoil-scripting-experimental --strip-components=1
+          
+          # Clean up the temporary folder
+          rm -rf ./tmp-artifact
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image locally
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          tags: vcml-pydrofoil:latest
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Make script executable
+        run: chmod +x container_run_simulator.sh
+
+      - name: Run test
+        run: timeout 30 ./container_run_simulator.sh docker

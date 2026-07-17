@@ -1,7 +1,18 @@
+/******************************************************************************
+ *                                                                            *
+ * Copyright 2026 Chiara Ghinami                                              *
+ *                                                                            *
+ * This software is licensed under the MIT license found in the               *
+ * LICENSE file at the root directory of this source tree.                    *
+ *                                                                            *
+ ******************************************************************************/
+
 #include "system.h"
 
-system::system(const sc_core::sc_module_name &nm)
-    : vcml::system(nm), 
+namespace virtual_platform {
+
+system::system(const sc_core::sc_module_name& nm):
+    vcml::system(nm),
     ram("ram", {SRAM_LO, SRAM_HI}),
     bram("bram", {BOOT_LO, BOOT_HI}),
     addr_uart0("addr_uart0", {UART0_LO, UART0_HI}),
@@ -87,8 +98,9 @@ system::system(const sc_core::sc_module_name &nm)
     // m_uart0.serial_tx.stub();
 }
 
-system::~system() {
-  // nothing to do
+system::~system()
+{
+    // nothing to do
 }
 
 
@@ -118,8 +130,9 @@ int system::run() {
     vcml::log_info("  runtime        : %.4fs", realtime);
     vcml::log_info("  instructions   : %llu", ninsn);
     vcml::log_info("  sim speed      : %.1f MIPS", mips);
-    vcml::log_info("  realtime ratio : %.2f / 1s",
-                   realtime == 0.0 ? 0.0 : realtime / duration);
+    vcml::log_info("  realtime ratio : %.2f / 1s", realtime == 0.0 ? 0.0 : realtime / duration);
 
     return result;
 }
+
+} // namespace virtual_platform

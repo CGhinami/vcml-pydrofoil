@@ -9,7 +9,7 @@ get_filename_component(PYDROFOIL_LIB_DIR "${PROJECT_SOURCE_DIR}/.." ABSOLUTE)
 message(STATUS "PYDROFOIL_LIB_DIR=${PYDROFOIL_LIB_DIR}")
 
 # Normally, we would create a library for those, install it
-# and import it using find_package(), here it seems that 
+# and import it using find_package(), here it seems that
 # find_github_repo takes care of this for us, those sets
 # are somehow used by find_github_repo()
 set(DEPS_DIR_GENERAL ${PROJECT_SOURCE_DIR}/deps)
@@ -37,7 +37,7 @@ add_executable(sysc_vp
 target_include_directories(sysc_vp PRIVATE
     ${PYDROFOIL_LIB_DIR}
     ${PROJECT_SOURCE_DIR}/include
-    ${SRC}  
+    ${SRC}
 )
 
 target_link_directories(sysc_vp PRIVATE
@@ -47,7 +47,7 @@ target_link_directories(sysc_vp PRIVATE
 
 # Tells the linker where to find compiled code *at compile time*
 target_link_libraries(sysc_vp mwr vcml)
-target_link_libraries(sysc_vp 
+target_link_libraries(sysc_vp
   pypy3.11-c
   pydrofoilcapi_cffi # The linker expects to find a shared object named libpydorofilapi_cffi.so
 )
