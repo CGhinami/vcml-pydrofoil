@@ -34,8 +34,7 @@ system::system(const sc_core::sc_module_name& nm):
     m_clint("clint"),
     m_sdcard("sdcard"),
     m_sdhci("sdhci"),
-    m_term0("term0"),
-    m_uart_injector("uart_injector") {
+    m_term0("term0") {
 
     tlm_bind(m_bus, m_loader, "insn");
     tlm_bind(m_bus, m_loader, "data");
@@ -86,8 +85,6 @@ system::system(const sc_core::sc_module_name& nm):
     m_plic.irqt[1].bind(m_core.irq[core::SEIP]);
     m_clint.irq_sw[0].bind(m_core.irq[core::MSIP]); 
     m_clint.irq_timer[0].bind(m_core.irq[core::MTIP]);
-
-    m_uart_injector.uart_tx.stub();
 }
 
 system::~system()

@@ -13,7 +13,6 @@
 #include <vcml.h>
 #include "core.h"
 #include "vcml/models/riscv/plic.h"
-#include "uart_injector.h"
 
 namespace virtual_platform {
 
@@ -87,7 +86,6 @@ class system : public vcml::system {
   
   vcml::serial::uart8250  m_uart0;
   vcml::riscv::plic    m_plic;
-  injector::UartInjector  m_uart_injector;
   vcml::riscv::clint   m_clint;
   vcml::sd::card m_sdcard;
   vcml::sd::sdhci m_sdhci;
