@@ -46,11 +46,11 @@ enum : mwr::u64 {
 };
 
 class system : public vcml::system {
-    public:
-    using u16 = vcml::u16;
-    using u32 = vcml::u32;
-    using u64 = vcml::u64;
-    using range = vcml::range;
+  public:
+  using u16 = vcml::u16;
+  using u32 = vcml::u32;
+  using u64 = vcml::u64;
+  using range = vcml::range;
 
   vcml::property<range> ram;
   vcml::property<range> bram;
@@ -60,41 +60,38 @@ class system : public vcml::system {
   vcml::property<range> addr_sdhci;
   vcml::property<int>   irq_uart0;
   vcml::property<int>   irq_sdhci;
-  
-  
 
-    system(const sc_core::sc_module_name& nm);
-    virtual ~system();
-    VCML_KIND(sysc_vp::system);
-    // virtual const char *version() const override;
 
-    virtual int run() override;
 
-    private:
-    core::PydrofoilCore m_core;
+  system(const sc_core::sc_module_name& nm);
+  virtual ~system();
+  VCML_KIND(sysc_vp::system);
+  // virtual const char *version() const override;
 
-    vcml::generic::bus m_bus;
-    vcml::generic::memory m_ram;
-    vcml::generic::memory m_bram;
+  virtual int run() override;
 
-    // A throttle ensures the simulation runs
-    // at a controlled pace, not faster than real time.
-    vcml::meta::throttle m_throttle;
-    vcml::meta::loader m_loader;
+  private:
+  core::PydrofoilCore m_core;
+
+  vcml::generic::bus m_bus;
+  vcml::generic::memory m_ram;
+  vcml::generic::memory m_bram;
+
+  // A throttle ensures the simulation runs
+  // at a controlled pace, not faster than real time.
+  vcml::meta::throttle m_throttle;
+  vcml::meta::loader m_loader;
 
   vcml::generic::clock m_clock_cpu;
   vcml::generic::reset m_reset;
   
   vcml::serial::uart8250  m_uart0;
   vcml::riscv::plic    m_plic;
-  UartInjector         m_uart_injector;
+  injector::UartInjector  m_uart_injector;
   vcml::riscv::clint   m_clint;
   vcml::sd::card m_sdcard;
   vcml::sd::sdhci m_sdhci;
   vcml::serial::terminal m_term0;
-
-    vcml::serial::terminal m_term;
-    vcml::meta::simdev m_simdev;
 };
 
 } // namespace virtual_platform

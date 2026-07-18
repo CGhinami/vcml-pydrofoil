@@ -42,12 +42,12 @@ PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name):
     task_cv.notify_one(); // notify the waiting thread
     done.get(); // Wait for the result
 
-    PythonTask dt_task;
-    dt_task.py_funct = Funct::WriteReg;
+    backend::PythonTask dt_task;
+    dt_task.py_funct = backend::Funct::WriteReg;
     
     // Wir packen die Argumente in das struct/tuple, 
     // das der Handler später mit std::get ausliest
-    dt_task.arg = WriteRegArgs{"x11", 0x87f00000}; 
+    dt_task.arg = backend::WriteRegArgs{"x11", 0x87f00000}; 
     
     std::future<uint64_t> done_dt = dt_task.result.get_future();
 
@@ -109,7 +109,7 @@ PydrofoilCore::~PydrofoilCore()
 void PydrofoilCore::notify_pending_irq(bool set)
 {
     uint32_t mip_val;
-   if(irq_num == MEIP)
+    if(irq_num == MEIP)
         mip_val = set ? (MEIP_BIT) : 0;
     else if(irq_num == SEIP)
         mip_val = set ? (SEIP_BIT) : 0;
@@ -330,12 +330,12 @@ vcml::u64 PydrofoilCore::cycle_count() const
 void PydrofoilCore::reset()
 {
     //pydrofoil_cpu_reset(cpu);
-    PythonTask dt_task;
-    dt_task.py_funct = Funct::WriteReg;
+    backend::PythonTask dt_task;
+    dt_task.py_funct = backend::Funct::WriteReg;
     
     // Wir packen die Argumente in das struct/tuple, 
     // das der Handler später mit std::get ausliest
-    dt_task.arg = WriteRegArgs{"x11", 0x87f00000}; 
+    dt_task.arg = backend::WriteRegArgs{"x11", 0x87f00000}; 
     
     std::future<uint64_t> done_dt = dt_task.result.get_future();
 

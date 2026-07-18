@@ -85,13 +85,13 @@ system::system(const sc_core::sc_module_name& nm):
     // Connect the core irq to the plic (init socket)
     //gpio_bind(m_core, "irq", m_plic, "irqt"); // is this correct? does gpio bind work with arrays?
     // Context 0 (M-Mode) an den Machine-External-Interrupt-Pin (11) klemmen
-    m_plic.irqt[0].bind(m_core.irq[MEIP]); 
+    m_plic.irqt[0].bind(m_core.irq[core::MEIP]); 
 
     // Context 1 (S-Mode) an den Supervisor-External-Interrupt-Pin (9) klemmen
     // (Das zwingt VCML dazu, die Register für Context 1 bei 0x2080 anzulegen!)
-    m_plic.irqt[1].bind(m_core.irq[SEIP]);
-    m_clint.irq_sw[0].bind(m_core.irq[MSIP]); 
-    m_clint.irq_timer[0].bind(m_core.irq[MTIP]);
+    m_plic.irqt[1].bind(m_core.irq[core::SEIP]);
+    m_clint.irq_sw[0].bind(m_core.irq[core::MSIP]); 
+    m_clint.irq_timer[0].bind(m_core.irq[core::MTIP]);
 
     // m_uart_injector.uart_tx.bind(m_uart0.serial_rx);
     m_uart_injector.uart_tx.stub();
@@ -104,16 +104,16 @@ system::~system()
 }
 
 
-void system::inject_data(sc_core::sc_time period)
-{
-    sc_core::sc_spawn( [this, period]() mutable 
-    { 
-      wait(period);
-      uint8_t data = 15;
-      m_uart_injector.send_to_guest(data); 
-      vcml::log_info("Data Injected");
-  });
-}
+// void system::inject_data(sc_core::sc_time period)
+// {
+//     sc_core::sc_spawn( [this, period]() mutable 
+//     { 
+//       wait(period);
+//       uint8_t data = 15;
+//       m_uart_injector.send_to_guest(data); 
+//       vcml::log_info("Data Injected");
+//   });
+// }
 
 
 int system::run() {

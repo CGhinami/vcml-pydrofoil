@@ -17,7 +17,7 @@
 #include <unordered_map>
 #include "arch.h"
 
-// FOrward declaration
+// Forward declaration
 namespace backend {
 struct PythonTask;
 }
