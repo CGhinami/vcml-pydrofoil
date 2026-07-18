@@ -75,27 +75,19 @@ system::system(const sc_core::sc_module_name& nm):
     gpio_bind(m_reset, "rst", m_sdcard, "rst");
 
     sd_bind(m_sdhci, "sd_out", m_sdcard, "sd_in");
-    // Connect the uart irq to the plic (target socket)
     gpio_bind(m_uart0, "irq", m_plic, "irqs", IRQ_UART0);
     gpio_bind(m_sdhci, "irq", m_plic, "irqs", IRQ_SDHCI);
 
     serial_bind(m_term0, "serial_tx", m_uart0, "serial_rx");
     serial_bind(m_term0, "serial_rx", m_uart0, "serial_tx");
 
-    // Connect the core irq to the plic (init socket)
-    //gpio_bind(m_core, "irq", m_plic, "irqt"); // is this correct? does gpio bind work with arrays?
-    // Context 0 (M-Mode) an den Machine-External-Interrupt-Pin (11) klemmen
     m_plic.irqt[0].bind(m_core.irq[core::MEIP]); 
 
-    // Context 1 (S-Mode) an den Supervisor-External-Interrupt-Pin (9) klemmen
-    // (Das zwingt VCML dazu, die Register für Context 1 bei 0x2080 anzulegen!)
     m_plic.irqt[1].bind(m_core.irq[core::SEIP]);
     m_clint.irq_sw[0].bind(m_core.irq[core::MSIP]); 
     m_clint.irq_timer[0].bind(m_core.irq[core::MTIP]);
 
-    // m_uart_injector.uart_tx.bind(m_uart0.serial_rx);
     m_uart_injector.uart_tx.stub();
-    // m_uart0.serial_tx.stub();
 }
 
 system::~system()
@@ -103,21 +95,7 @@ system::~system()
     // nothing to do
 }
 
-
-// void system::inject_data(sc_core::sc_time period)
-// {
-//     sc_core::sc_spawn( [this, period]() mutable 
-//     { 
-//       wait(period);
-//       uint8_t data = 15;
-//       m_uart_injector.send_to_guest(data); 
-//       vcml::log_info("Data Injected");
-//   });
-// }
-
-
 int system::run() {
-    // inject_data(sc_core::sc_time(0.05, sc_core::SC_MS));
     double simstart = mwr::timestamp();
     int result = vcml::system::run();
     double realtime = mwr::timestamp() - simstart;

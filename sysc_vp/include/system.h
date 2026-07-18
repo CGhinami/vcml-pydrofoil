@@ -22,12 +22,12 @@ enum : mwr::u64 {
   SRAM_LO = 0x80000000,
   SRAM_HI = SRAM_LO + SRAM_SZ - 1,
 
-    BOOT_SZ = 4 * mwr::KiB,
-    BOOT_LO = 0x00001000,
-    BOOT_HI = BOOT_LO + BOOT_SZ - 1,
+  BOOT_SZ = 4 * mwr::KiB,
+  BOOT_LO = 0x00001000,
+  BOOT_HI = BOOT_LO + BOOT_SZ - 1,
 
-    UART0_LO = 0x10009000,
-    UART0_HI = UART0_LO + 0x1000 - 1,
+  UART0_LO = 0x10009000,
+  UART0_HI = UART0_LO + 0x1000 - 1,
 
   PLIC_LO = 0x1000a000,
   PLIC_HI = PLIC_LO + 0x224FFF -1,
