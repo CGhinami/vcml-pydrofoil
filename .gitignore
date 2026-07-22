@@ -1,3 +1,16 @@
 pypy-pydrofoil-scripting-experimental/*
 testplugin
 _pydrofoilcapi_cffi.*
+*.o
+*.a
+*.elf
+*.bin
+*.o.tmp
+*.pyc
+*.so
+*.zip
+*.tar
+.vscode
+.cache
+**/build/
+**/bin/

@@ -1,125 +1,133 @@
+/******************************************************************************
+ *                                                                            *
+ * Copyright 2026 Chiara Ghinami                                              *
+ *                                                                            *
+ * This software is licensed under the MIT license found in the               *
+ * LICENSE file at the root directory of this source tree.                    *
+ *                                                                            *
+ ******************************************************************************/
+
 #include "python_tasks.h"
 #include "core.h"
 
-auto create_handlers(PydrofoilCore& core) // core == alias of the PydrofoilCore, we can use it inside the function as it is
-    -> std::unordered_map<Funct, std::function<void(PythonTask&)>>
+namespace backend {
+
+auto create_handlers(core::PydrofoilCore& pycore) -> std::unordered_map<Funct, std::function<void(PythonTask&)>>
 {
-    return {
-            {
-            Funct::Init, [&core](PythonTask &task){  // the lambda keeps a referece of PydrofoilCore
-                #if PROFILING
-                    Profiler t("Init");
-                #endif
-                auto core_type = std::get<char*>(task.arg);   
-                core.cpu = core.m_pydrofoil_allocate_cpu(core_type, nullptr); 
-                task.result.set_value(0);
+    return {{Funct::Init,
+             [&pycore](PythonTask& task) { // the lambda should keep a referece of PydrofoilCore
+#if PROFILING
+                 Profiler t("Init");
+#endif
+                 auto core_type = std::get<std::string>(task.arg);
+                 pycore.cpu = pycore.m_pydrofoil_allocate_cpu(core_type.data(), nullptr);
+                 task.result.set_value(0);
+             }},
+            {Funct::SetCb,
+             [&pycore](PythonTask& task) {
+#if PROFILING
+                 Profiler t("SetCb");
+#endif
+                 int res = pycore.m_pydrofoil_cpu_set_ram_read_write_callback(pycore.cpu, read_mem, write_mem, &pycore); //
+                 task.result.set_value(res);
+             }},
+            {Funct::GetCycles,
+             [&pycore](PythonTask& task) {
+#if PROFILING
+                 Profiler t("GetCycles");
+#endif
+                 pycore.n_cycles = pycore.m_pydrofoil_cpu_cycles(pycore.cpu);
+                 task.result.set_value(pycore.n_cycles);
+             }},
+            {Funct::SetBrkp,
+             [&pycore](PythonTask& task) {
+#if PROFILING
+                 Profiler t("SetBrkp");
+#endif
+                 auto addr = std::get<size_t>(task.arg);
+                 int res = pycore.m_pydrofoil_cpu_set_breakpoint(pycore.cpu, addr);
+                 task.result.set_value(int(res == 0));
+             }},
+            {Funct::RemoveBrkp,
+             [&pycore](PythonTask& task) {
+#if PROFILING
+                 Profiler t("RemoveBrkp");
+#endif
+                 auto addr = std::get<size_t>(task.arg);
+                 int res = pycore.m_pydrofoil_cpu_remove_breakpoint(pycore.cpu, addr);
+                 task.result.set_value(int(res == 0));
+             }},
+            {Funct::Simulate,
+             [&pycore](PythonTask& task) {
+#if PROFILING
+                 Profiler t("Simulate");
+#endif
+                 auto cycles = std::get<size_t>(task.arg);
+                 auto n_steps = pycore.m_pydrofoil_cpu_simulate(pycore.cpu, cycles);
+                 // pycore.n_cycles = core.m_pydrofoil_cpu_cycles(pycore.cpu);
+                 task.result.set_value(n_steps);
+                 pycore.memtask_cv.notify_one();
+             }},
+            {Funct::WriteReg,
+             [&pycore](PythonTask& task) {
+#if PROFILING
+                 Profiler t("WriteReg");
+#endif
+                 auto args = std::get<WriteRegArgs>(task.arg);
+                 int res = pycore.m_pydrofoil_cpu_write_reg(pycore.cpu, args.reg_name, args.value);
+                 task.result.set_value(int(res == 0));
+             }},
+            {Funct::ReadReg,
+             [&pycore](PythonTask& task) {
+#if PROFILING
+                 Profiler t("ReadReg");
+#endif
+                 auto reg_name = std::get<std::string>(task.arg);
+                 auto reg_value = pycore.m_pydrofoil_cpu_read_reg(pycore.cpu, reg_name.c_str());
+                 task.result.set_value(reg_value);
+             }},
+            {Funct::FreeCpu,
+             [&pycore](PythonTask& task) {
+#if PROFILING
+                 Profiler t("FreeCpu");
+#endif
+                 pycore.m_pydrofoil_free_cpu(pycore.cpu);
+                 task.result.set_value(0);
+             }},
+            {Funct::SetVerbosity,
+             [&pycore](PythonTask& task) {
+#if PROFILING
+                 Profiler t("SetVerbosity");
+#endif
+                 auto verbosity = std::get<uint32_t>(task.arg);
+                 pycore.m_pydrofoil_cpu_set_verbosity(pycore.cpu, verbosity);
+                 task.result.set_value(0);
             }},
             {
-            Funct::SetCb, [&core](PythonTask &task){
-                #if PROFILING
-                    Profiler t("SetCb");
-                #endif
-                int res = core.m_pydrofoil_cpu_set_ram_read_write_callback(core.cpu, read_mem, write_mem, &core);//
-                task.result.set_value(res);
-            }},
-            {
-            Funct::GetCycles, [&core](PythonTask &task){
-                #if PROFILING
-                    Profiler t("GetCycles");
-                #endif
-                core.n_cycles = core.m_pydrofoil_cpu_cycles(core.cpu);
-                task.result.set_value(core.n_cycles);
-            }},
-            {
-            Funct::SetBrkp, [&core](PythonTask &task){
-                #if PROFILING
-                    Profiler t("SetBrkp");
-                #endif
-                auto addr = std::get<size_t>(task.arg);
-                int res = core.m_pydrofoil_cpu_set_breakpoint(core.cpu, addr);
-                task.result.set_value(int(res == 0)); 
-            }},
-            {
-            Funct::RemoveBrkp, [&core](PythonTask &task){
-                #if PROFILING
-                    Profiler t("RemoveBrkp");
-                #endif
-                auto addr = std::get<size_t>(task.arg);
-                int res = core.m_pydrofoil_cpu_remove_breakpoint(core.cpu, addr);
-                task.result.set_value(int(res == 0)); 
-            }},
-            {
-            Funct::Simulate, [&core](PythonTask &task){
-                #if PROFILING
-                    Profiler t("Simulate");
-                #endif
-                auto cycles = std::get<size_t>(task.arg);
-                auto n_steps = core.m_pydrofoil_cpu_simulate(core.cpu, cycles);
-                //core.n_cycles = core.m_pydrofoil_cpu_cycles(core.cpu);
-                task.result.set_value(n_steps); 
-                core.memtask_cv.notify_one();
-            }},
-            {
-            Funct::WriteReg, [&core](PythonTask &task){
-                #if PROFILING
-                    Profiler t("WriteReg");
-                #endif
-                auto args = std::get<WriteRegArgs>(task.arg);
-                int res = core.m_pydrofoil_cpu_write_reg(core.cpu, args.reg_name, args.value);
-                task.result.set_value(int(res == 0));
-            }},
-            {
-            Funct::ReadReg, [&core](PythonTask &task){
-                #if PROFILING
-                    Profiler t("ReadReg");
-                #endif
-                auto reg_name = std::get<const char*>(task.arg);
-                auto reg_value = core.m_pydrofoil_cpu_read_reg(core.cpu, reg_name);
-                task.result.set_value(reg_value);
-            }},
-            {
-            Funct::FreeCpu, [&core](PythonTask &task){
-                #if PROFILING
-                    Profiler t("FreeCpu");
-                #endif
-                core.m_pydrofoil_free_cpu(core.cpu);
-                task.result.set_value(0);
-            }},
-            {
-            Funct::SetVerbosity, [&core](PythonTask &task){
-                #if PROFILING
-                    Profiler t("SetVerbosity");
-                #endif
-                auto verbosity = std::get<size_t>(task.arg);
-                core.m_pydrofoil_cpu_set_verbosity(core.cpu, verbosity);
-                task.result.set_value(0);
-            }},
-            {
-            Funct::SetHartId, [&core](PythonTask &task){
+            Funct::SetHartId, [&pycore](PythonTask &task){
                 // We assume arg holds the ID (std::variant check)
                 uint64_t id = std::get<uint64_t>(task.arg);
-                core.m_pydrofoil_set_hartid(core.cpu, id);
+                pycore.m_pydrofoil_set_hartid(pycore.cpu, id);
                 task.result.set_value(0);
-            }},
-            {
-            Funct::SetDMI, [&core](PythonTask &task){
-                #if PROFILING
-                    Profiler t("SetDMI");
-                #endif
-                auto start_addr = std::get<size_t>(task.arg);
-                auto dmi_region = core.mem_regions[start_addr];
-                int res = core.m_pydrofoil_cpu_set_dma_region(core.cpu, start_addr, dmi_region.size, dmi_region.ptr);
-                task.result.set_value(res);
-            }},
-            {
-            Funct::SetMIP, [&core](PythonTask &task){
-                #if PROFILING
-                    Profiler t("RaiseIrq");
-                #endif
-                auto value = std::get<size_t>(task.arg);
-                core.m_pydrofoil_set_interrupt_pending(core.cpu, value);
-                task.result.set_value(0);
-            }
-            }
-    };
+             }},
+            {Funct::SetDMI,
+             [&pycore](PythonTask& task) {
+#if PROFILING
+                 Profiler t("SetDMI");
+#endif
+                 auto start_addr = std::get<size_t>(task.arg);
+                 auto dmi_region = pycore.mem_regions[start_addr];
+                 int res = pycore.m_pydrofoil_cpu_set_dma_region(pycore.cpu, start_addr, dmi_region.size, dmi_region.ptr);
+                 task.result.set_value(res);
+             }},
+            {Funct::SetMIP, [&pycore](PythonTask& task) {
+#if PROFILING
+                 Profiler t("RaiseIrq");
+#endif
+                 auto value = std::get<size_t>(task.arg);
+                 pycore.m_pydrofoil_set_interrupt_pending(pycore.cpu, value);
+                 task.result.set_value(0);
+             }}};
 }
+
+} // namespace backend
