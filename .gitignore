@@ -14,3 +14,5 @@ _pydrofoilcapi_cffi.*
 .cache
 **/build/
 **/bin/
+benchmark/dhrystone_2cores/build
+logs/
