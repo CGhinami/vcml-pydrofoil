@@ -31,7 +31,7 @@ PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name, uint64_t hart_
 {
     // --- ISOLATED LIBRARY SETUP ---
     std::string base_lib = "./libpydrofoilcapi_cffi.so";
-    std::string isolated_dir = "./isolated_libs";
+    std::string isolated_dir = "/tmp/isolated_libs";
     std::filesystem::create_directories(isolated_dir);
 
     std::string inst_lib = isolated_dir + "/libpydrofoil_hart" +

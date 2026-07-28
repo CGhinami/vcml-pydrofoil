@@ -80,7 +80,7 @@ system::~system()
 {
   // Wipe the entire folder and its contents
   std::error_code ec;
-  std::filesystem::remove_all("./isolated_libs", ec);
+  std::filesystem::remove_all("/tmp/isolated_libs", ec);
   
   if (ec) {
       mwr::log_warn("Failed to clean up isolated_libs: %s", ec.message().c_str());
