@@ -1,24 +1,34 @@
+/******************************************************************************
+ *                                                                            *
+ * Copyright 2026 Chiara Ghinami                                              *
+ *                                                                            *
+ * This software is licensed under the MIT license found in the               *
+ * LICENSE file at the root directory of this source tree.                    *
+ *                                                                            *
+ ******************************************************************************/
+
 #include "python_tasks.h"
 #include "core.h"
 
 // Keine PydrofoilCore& Parameter mehr!
+namespace backend {
 auto create_handlers() -> std::unordered_map<Funct, std::function<void(PythonTask&)>>
 {
     return {
         {
             Funct::Init, [](PythonTask &task){  
-                PydrofoilCore* core = task.caller_core; // <-- Core aus Task holen
+                core::PydrofoilCore* core = task.caller_core; // <-- Core aus Task holen
                 #if PROFILING
                     Profiler t("Init");
                 #endif
-                auto core_type = std::get<char*>(task.arg);   
-                core->cpu = pydrofoil_allocate_cpu(core_type, nullptr); 
+                auto core_type = std::get<std::string>(task.arg); 
+                core->cpu = pydrofoil_allocate_cpu(core_type.data(), nullptr); 
                 task.result.set_value(0);
             }
         },
         {
             Funct::SetCb, [](PythonTask &task){
-                PydrofoilCore* core = task.caller_core;
+                core::PydrofoilCore* core = task.caller_core;
                 #if PROFILING
                     Profiler t("SetCb");
                 #endif
@@ -30,7 +40,7 @@ auto create_handlers() -> std::unordered_map<Funct, std::function<void(PythonTas
         },
         {
             Funct::GetCycles, [](PythonTask &task){
-                PydrofoilCore* core = task.caller_core;
+                core::PydrofoilCore* core = task.caller_core;
                 #if PROFILING
                     Profiler t("GetCycles");
                 #endif
@@ -40,7 +50,7 @@ auto create_handlers() -> std::unordered_map<Funct, std::function<void(PythonTas
         },
         {
             Funct::SetBrkp, [](PythonTask &task){
-                PydrofoilCore* core = task.caller_core;
+                core::PydrofoilCore* core = task.caller_core;
                 #if PROFILING
                     Profiler t("SetBrkp");
                 #endif
@@ -51,7 +61,7 @@ auto create_handlers() -> std::unordered_map<Funct, std::function<void(PythonTas
         },
         {
             Funct::RemoveBrkp, [](PythonTask &task){
-                PydrofoilCore* core = task.caller_core;
+                core::PydrofoilCore* core = task.caller_core;
                 #if PROFILING
                     Profiler t("RemoveBrkp");
                 #endif
@@ -62,7 +72,7 @@ auto create_handlers() -> std::unordered_map<Funct, std::function<void(PythonTas
         },
         {
             Funct::Simulate, [](PythonTask &task){
-                PydrofoilCore* core = task.caller_core;
+                core::PydrofoilCore* core = task.caller_core;
                 #if PROFILING
                     Profiler t("Simulate");
                 #endif
@@ -77,7 +87,7 @@ auto create_handlers() -> std::unordered_map<Funct, std::function<void(PythonTas
         },
         {
             Funct::WriteReg, [](PythonTask &task){
-                PydrofoilCore* core = task.caller_core;
+                core::PydrofoilCore* core = task.caller_core;
                 #if PROFILING
                     Profiler t("WriteReg");
                 #endif
@@ -88,18 +98,18 @@ auto create_handlers() -> std::unordered_map<Funct, std::function<void(PythonTas
         },
         {
             Funct::ReadReg, [](PythonTask &task){
-                PydrofoilCore* core = task.caller_core;
+                core::PydrofoilCore* core = task.caller_core;
                 #if PROFILING
                     Profiler t("ReadReg");
                 #endif
-                auto reg_name = std::get<const char*>(task.arg);
-                auto reg_value = pydrofoil_cpu_read_reg(core->cpu, reg_name);
+                auto reg_name = std::get<std::string>(task.arg);
+                auto reg_value = pydrofoil_cpu_read_reg(core->cpu, reg_name.data());
                 task.result.set_value(reg_value);
             }
         },
         {
             Funct::FreeCpu, [](PythonTask &task){
-                PydrofoilCore* core = task.caller_core;
+                core::PydrofoilCore* core = task.caller_core;
                 #if PROFILING
                     Profiler t("FreeCpu");
                 #endif
@@ -109,18 +119,18 @@ auto create_handlers() -> std::unordered_map<Funct, std::function<void(PythonTas
         },
         {
             Funct::SetVerbosity, [](PythonTask &task){
-                PydrofoilCore* core = task.caller_core;
+                core::PydrofoilCore* core = task.caller_core;
                 #if PROFILING
                     Profiler t("SetVerbosity");
                 #endif
-                auto verbosity = std::get<size_t>(task.arg);
+                auto verbosity = std::get<uint32_t>(task.arg);
                 pydrofoil_cpu_set_verbosity(core->cpu, verbosity);
                 task.result.set_value(0);
             }
         },
         {
             Funct::SetHartId, [](PythonTask &task){
-                PydrofoilCore* core = task.caller_core;
+                core::PydrofoilCore* core = task.caller_core;
                 uint64_t id = std::get<uint64_t>(task.arg);
                 pydrofoil_set_hartid(core->cpu, id);
                 task.result.set_value(0);
@@ -128,7 +138,7 @@ auto create_handlers() -> std::unordered_map<Funct, std::function<void(PythonTas
         },
         {
             Funct::SetDMI, [](PythonTask &task){
-                PydrofoilCore* core = task.caller_core;
+                core::PydrofoilCore* core = task.caller_core;
                 #if PROFILING
                     Profiler t("SetDMI");
                 #endif
@@ -140,7 +150,7 @@ auto create_handlers() -> std::unordered_map<Funct, std::function<void(PythonTas
         },
         {
             Funct::SetMIP, [](PythonTask &task){
-                PydrofoilCore* core = task.caller_core;
+                core::PydrofoilCore* core = task.caller_core;
                 #if PROFILING
                     Profiler t("RaiseIrq");
                 #endif
@@ -151,3 +161,5 @@ auto create_handlers() -> std::unordered_map<Funct, std::function<void(PythonTas
         }
     };
 }
+
+} // namespace backend

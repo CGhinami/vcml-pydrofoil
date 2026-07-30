@@ -1,13 +1,24 @@
+/******************************************************************************
+ *                                                                            *
+ * Copyright 2026 Chiara Ghinami                                              *
+ *                                                                            *
+ * This software is licensed under the MIT license found in the               *
+ * LICENSE file at the root directory of this source tree.                    *
+ *                                                                            *
+ ******************************************************************************/
+
 #include "system.h"
 
-system::system(const sc_core::sc_module_name &nm)
-    : vcml::system(nm), 
+namespace virtual_platform {
+
+system::system(const sc_core::sc_module_name& nm):
+    vcml::system(nm),
     ram("ram", {SRAM_LO, SRAM_HI}),
     bram("bram", {BOOT_LO, BOOT_HI}),
     addr_uart0("addr_uart0", {UART0_LO, UART0_HI}),
     addr_plic("addr_plic", {PLIC_LO, PLIC_HI}),
-    irq_uart0("irq_uart0", IRQ_UART0),
     addr_simdev("addr_simdev", {SIMDEV_LO, SIMDEV_HI}),
+    irq_uart0("irq_uart0", IRQ_UART0),
     addr_multicore_simdev("addr_multicore_simdev", {MULTICORE_SIMDEV_LO, MULTICORE_SIMDEV_HI}),
     m_bus("bus"),
     m_ram("sram", ram.get().length()),
@@ -22,7 +33,8 @@ system::system(const sc_core::sc_module_name &nm)
     m_core2("core2", 1),
     m_simdev("simdev"),
     m_multicore_simdev("multicore_simdev", 2),
-    m_uart_injector("uart_injector") {
+    m_term("term")
+{
     tlm_bind(m_bus, m_loader, "insn");
     tlm_bind(m_bus, m_loader, "data");
     tlm_bind(m_bus, m_ram, "in", ram);
@@ -62,30 +74,19 @@ system::system(const sc_core::sc_module_name &nm)
     gpio_bind(m_uart0, "irq", m_plic, "irqs", IRQ_UART0);
 
     // Connect the core irq to the plic (init socket)
-    //gpio_bind(m_core, "irq", m_plic, "irqt"); // is this correct? does gpio bind work with arrays?
+    // gpio_bind(m_core, "irq", m_plic, "irqt"); // is this correct? does gpio bind work with arrays?
     m_plic.irqt[0].bind(m_core.irq[0]);
 
-    m_uart_injector.uart_tx.bind(m_uart0.serial_rx);
-    m_uart0.serial_tx.stub();
+    serial_bind(m_term, "serial_tx", m_uart0, "serial_rx");
+    serial_bind(m_term, "serial_rx", m_uart0, "serial_tx");
 }
 
-system::~system() {
-  // nothing to do
-}
-
-void system::inject_data(sc_core::sc_time period)
+system::~system()
 {
-    sc_core::sc_spawn( [this, period]() mutable 
-    { 
-      wait(period);
-      uint8_t data = 15;
-      m_uart_injector.send_to_guest(data); 
-      vcml::log_info("Data Injected");
-    });
+    // nothing to do
 }
 
 int system::run() {
-    inject_data(sc_core::sc_time(0.05, sc_core::SC_MS));
     double simstart = mwr::timestamp();
     int result = vcml::system::run();
     double realtime = mwr::timestamp() - simstart;
@@ -99,8 +100,9 @@ int system::run() {
     vcml::log_info("  instructions core 0   : %llu", m_core.cycle_count());
     vcml::log_info("  instructions core 1   : %llu", m_core2.cycle_count());
     vcml::log_info("  sim speed      : %.1f MIPS", mips);
-    vcml::log_info("  realtime ratio : %.2f / 1s",
-                   realtime == 0.0 ? 0.0 : realtime / duration);
+    vcml::log_info("  realtime ratio : %.2f / 1s", realtime == 0.0 ? 0.0 : realtime / duration);
 
     return result;
 }
+
+} // namespace virtual_platform

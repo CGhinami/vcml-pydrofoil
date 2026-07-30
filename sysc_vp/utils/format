@@ -1,0 +1,35 @@
+#!/usr/bin/env python3
+
+import os
+import sys
+import subprocess
+import platform
+import tempfile
+from pathlib import Path
+
+root = Path(__file__).resolve().parents[2]
+ext = '.exe' if platform.system() == 'Windows' else ''
+arch = platform.machine().lower()
+formatter = root / 'sysc_vp' / 'deps' / 'mwr' / 'cmake' / 'Tools' \
+            / platform.system() / f'clang-format-18.{arch}{ext}'
+
+if not formatter.exists():
+    print(f"error: formatter not found: {formatter}", file=sys.stderr)
+    sys.exit(1)
+
+srcdirs = [root / 'sysc_vp' / 'include', root / 'sysc_vp' / 'src']
+
+with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as tmp:
+    tmp_path = tmp.name
+    for d in srcdirs:
+        for pattern in ('*.h', '*.cpp'):
+            for f in d.rglob(pattern):
+                tmp.write(f"{f}\n")
+
+try:
+    r = subprocess.run([formatter, '--style=file',
+                        f'--files={tmp_path}'] + sys.argv[1:])
+finally:
+    os.remove(tmp_path)
+
+sys.exit(r.returncode)

@@ -1,30 +1,38 @@
+/******************************************************************************
+ *                                                                            *
+ * Copyright 2026 Chiara Ghinami                                              *
+ *                                                                            *
+ * This software is licensed under the MIT license found in the               *
+ * LICENSE file at the root directory of this source tree.                    *
+ *                                                                            *
+ ******************************************************************************/
+
 #include "core.h"
 #include <cstdio>
 #include "riscv_arch.h"
 #include <string>
 // #include <filesystem>
 // #include <unistd.h> // <-- Add this for getpid()
+namespace core {
 std::thread PydrofoilCore::global_python_worker_thread;
-std::queue<PythonTask> PydrofoilCore::global_task_queue;
+std::queue<backend::PythonTask> PydrofoilCore::global_task_queue;
 std::condition_variable PydrofoilCore::global_task_cv;
 std::mutex PydrofoilCore::global_task_mutex;
 bool PydrofoilCore::global_worker_running = false;
 
-PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name, uint64_t hart_id) : 
-    vcml::processor(name,"riscv"),
-    elf("elf",""),
-    arch_name("arch_name","rv64"),
-    verbosity("verbose",false),
-    core_arch()
+PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name, uint64_t hart_id):
+    vcml::processor(name, "riscv"),
+    elf("elf", ""),
+    arch_name("arch_name", "rv64"),
+    verbosity("verbose", false),
+    cpu(nullptr),
+    use_dmi(true),
+    n_cycles(0),
+    step(true), // For the first execution we want just 1 instruction to run
+    core_arch(arch_name.c_str(), arch_name == "rv64" ? 64 : 32, architecture::regdb_riscv, 33),
+    m_hart_id(hart_id)
 {
-    char* core_type = (char*)"rv32";
-    if(arch_name.get() == "rv64"){
-        core_arch = Model("rv64", 64, regdb_riscv, 33);
-        core_type = (char*)"rv64";
-    }else
-        core_arch = Model("rv32", 32, regdb_riscv, 33);
-    
-    mwr::log_info("Running with arch: %d bit", 8*core_arch.word_size());
+    mwr::log_info("Running with arch: %d bit", 8 * core_arch.word_size());
     set_little_endian(); // Otherwise the gdbserver inverts the bytes it reads
 
     {
@@ -35,10 +43,10 @@ PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name, uint64_t hart_
         }
     }
     
-    PythonTask task;
-    task.py_funct = Funct::Init;
-    task.arg = core_type;
+    backend::PythonTask task;
+    task.py_funct = backend::Funct::Init;
     task.caller_core = this;
+    task.arg = arch_name;
     std::future<uint64_t> done = task.result.get_future();
 
     {
@@ -46,17 +54,16 @@ PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name, uint64_t hart_
         global_task_queue.push(std::move(task));
     }
     global_task_cv.notify_one();; // notify the waiting thread
-    done.get(); // Wait for the result
+    done.get();           // Wait for the result
 
     set_verbosity(verbosity.get());
-    m_hart_id = hart_id;  // Save it in the member variable for later use in reset()
 
-    for (size_t i = 0; i < core_arch.reg_number(); ++i) 
+    for(size_t i = 0; i < core_arch.reg_number(); ++i)
         define_cpureg_rw(i, core_arch.get_regs_ptr()[i].gdb_name, core_arch.word_size());
 }
 
-
-void PydrofoilCore::test_reg_access(size_t regno){
+void PydrofoilCore::test_reg_access(size_t regno)
+{
     size_t write_val = 0;
     size_t read_old_val = 0;
 
@@ -74,22 +81,21 @@ void PydrofoilCore::test_reg_access(size_t regno){
     write_reg_dbg(1, (const void*) &read_old_val, core_arch.word_size());
 }
 
-
 PydrofoilCore::~PydrofoilCore()
 {
-    if(cpu){
-        PythonTask task;
-        task.py_funct = Funct::FreeCpu;
+    if(cpu) {
+        backend::PythonTask task;
+        task.py_funct = backend::Funct::FreeCpu;
         task.caller_core = this; // <-- CRITICAL: Tell Python WHICH cpu to free!
         
         std::future<uint64_t> done = task.result.get_future();
 
         {
-            std::lock_guard<std::mutex> lock(global_task_mutex); // Use global mutex
-            global_task_queue.push(std::move(task));             // Use global queue
+            std::lock_guard lock(global_task_mutex);
+            global_task_queue.push(std::move(task));
         }
-        global_task_cv.notify_one();;
-        done.get(); // Wait for Python to actually free the memory
+        global_task_cv.notify_one();
+        done.get();
     }
 
     // REMOVED: stop_worker = true;
@@ -116,57 +122,50 @@ void PydrofoilCore::shutdown_worker()
     }
 }
 
-
-
-void PydrofoilCore::notify_pending_irq(bool set){
-    uint32_t mip_val;
-    if(irq_num == MEIP)
+void PydrofoilCore::notify_pending_irq(bool set)
+{
+    size_t mip_val;
+    if (irq_num == MEIP)
         mip_val = set ? (MEIP_BIT) : 0;
-    else if(irq_num == SEIP)
+    else if (irq_num == SEIP)
         mip_val = set ? (SEIP_BIT) : 0;
 
-    PythonTask task;
-    task.py_funct = Funct::SetMIP;
+    backend::PythonTask task;
+    task.py_funct = backend::Funct::SetMIP;
     task.arg = mip_val;
-    task.caller_core = this;
     std::future<uint64_t> done = task.result.get_future();
 
     {
         std::lock_guard lock(global_task_mutex);
         global_task_queue.push(std::move(task));
     }
-    global_task_cv.notify_one();; // notify the waiting thread
-    done.get(); // Wait for the result
+    global_task_cv.notify_one(); // notify the waiting thread
+    done.get();           // Wait for the result
 }
 
 
-void PydrofoilCore::interrupt(size_t irq, bool set) 
+void PydrofoilCore::interrupt(size_t irq, bool set)
 {
-    if(set)
-        is_irq_pending = true;
-    else
-        is_irq_pending = false;
-
+    is_irq_pending = set;
     irq_num = irq;
 }
-
 
 bool PydrofoilCore::write_reg_dbg(size_t regno, const void* buf, size_t len)
 {
     if(regno == 0)
         return true;
 
-    if(len != core_arch.word_size()) 
+    if(len != core_arch.word_size())
         return false;
 
-    PythonTask task;
-    task.py_funct = Funct::WriteReg;
+    backend::PythonTask task;
+    task.py_funct = backend::Funct::WriteReg;
     task.caller_core = this;
     size_t reg_val;
 
     std::string reg_name = core_arch.get_regs_ptr()[regno].x_name;
     std::memcpy(&reg_val, buf, len);
-    task.arg = WriteRegArgs{reg_name.c_str(), reg_val};
+    task.arg = backend::WriteRegArgs{reg_name.c_str(), reg_val};
 
     std::future<uint64_t> done = task.result.get_future();
 
@@ -177,25 +176,23 @@ bool PydrofoilCore::write_reg_dbg(size_t regno, const void* buf, size_t len)
     global_task_cv.notify_one();; // notify the waiting thread
 
     return done.get(); // Wait for the result
-
 }
-
 
 bool PydrofoilCore::read_reg_dbg(size_t regno, void* buf, size_t len)
 {
-    if(regno == 0){
+    if(regno == 0) {
         std::memcpy(buf, &regno, core_arch.word_size()); // We just copy 0
         return true;
     }
 
-    if(len != core_arch.word_size()) 
+    if(len != core_arch.word_size())
         return false;
 
     std::string reg_name = core_arch.get_regs_ptr()[regno].x_name;
 
-    PythonTask task;
-    task.py_funct = Funct::ReadReg;
-    task.arg = reg_name.c_str();
+    backend::PythonTask task;
+    task.py_funct = backend::Funct::ReadReg;
+    task.arg = reg_name;
     task.caller_core = this;
     std::future<uint64_t> done = task.result.get_future();
 
@@ -205,26 +202,24 @@ bool PydrofoilCore::read_reg_dbg(size_t regno, void* buf, size_t len)
     }
     global_task_cv.notify_one();; // notify the waiting thread
 
-    uint64_t reg_val = done.get(); // Wait for the result
+    uint64_t reg_val = done.get();   // Wait for the result
     std::memcpy(buf, &reg_val, len); // Truncates if sizeof reg_val > word_size (only works with little-endian!)
 
     return true;
 }
 
-
 void PydrofoilCore::check_for_dmi_regions()
 {
-    for(const tlm::tlm_dmi& dmi : data.dmi_cache().get_entries()) 
-    {
-        if(mem_regions.find(dmi.get_start_address()) == mem_regions.end()){
+    for(const tlm::tlm_dmi& dmi : data.dmi_cache().get_entries()) {
+        if(mem_regions.find(dmi.get_start_address()) == mem_regions.end()) {
             uint64_t s = dmi.get_start_address();
             uint64_t e = dmi.get_end_address();
             auto size = e - s + 1; // +1 to include the last byte
 
-            mem_regions.emplace(s, MemRegion{dmi.get_dmi_ptr(),s,size});
+            mem_regions.emplace(s, MemRegion{dmi.get_dmi_ptr(), s, size});
 
-            PythonTask task;
-            task.py_funct = Funct::SetDMI;
+            backend::PythonTask task;
+            task.py_funct = backend::Funct::SetDMI;
             task.arg = s;
             task.caller_core = this;
             std::future<uint64_t> done = task.result.get_future();
@@ -237,21 +232,19 @@ void PydrofoilCore::check_for_dmi_regions()
             if(done.get() != 0)
                 mwr::log_info("Setting DMI pointer failed");
         }
-
     }
 }
-
 
 // Called from a coroutine
 void PydrofoilCore::simulate(size_t cycles)
 {
-    if(is_irq_pending.has_value()){
+    if(is_irq_pending.has_value()) {
         notify_pending_irq(is_irq_pending.value());
         is_irq_pending.reset();
     }
-    // std::cout << "SIMULATE with hard_i: " << m_hart_id << std::endl;
-    PythonTask task;
-    task.py_funct = Funct::Simulate;
+
+    backend::PythonTask task;
+    task.py_funct = backend::Funct::Simulate;
     task.arg = step ? 1 : cycles;
     task.caller_core = this;
     std::future<uint64_t> done = task.result.get_future();
@@ -270,26 +263,24 @@ void PydrofoilCore::simulate(size_t cycles)
 
         {
             std::unique_lock<std::mutex> lock(memtask_mutex);
-            memtask_cv.wait(lock, [&]{return !memtask_queue.empty() ||
-                                                (done.wait_for(std::chrono::seconds(0)) == std::future_status::ready);});
-            
-            if(!memtask_queue.empty()){
-                memtask = std::move(memtask_queue.front());
-                memtask_queue.pop();
-            }
-            else
+            memtask_cv.wait(lock, [&] {
+                return !memtask_queue.empty() || (done.wait_for(std::chrono::seconds(0)) == std::future_status::ready);
+            });
+
+            if(memtask_queue.empty())
                 continue;
-            
+
+            memtask = std::move(memtask_queue.front());
+            memtask_queue.pop();
         }
 
         bool success = false;
-        if(memtask.type == MemTask::Read){
+        if(memtask.type == MemTask::Read) {
             success = (data.read(memtask.addr, memtask.dest, memtask.size, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE);
-            //memset(memtask.dest,0x297,8); // To be removed once the 0x1000 initial accesses are fixed
-        }
-        else
+            // memset(memtask.dest,0x297,8); // To be removed once the 0x1000 initial accesses are fixed
+        } else
             success = (data.write(memtask.addr, &memtask.value, memtask.size, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE);
-        
+
         if(!success)
             mwr::log_info("Memory access failed with address: %lx", memtask.addr);
 
@@ -297,14 +288,15 @@ void PydrofoilCore::simulate(size_t cycles)
     }
 
     size_t current_steps = done.get();
-    if(!step && current_steps < cycles)
+    bool brkpt_hit = current_steps > 0 && current_steps < cycles;
+
+    if(!step && brkpt_hit)
         handle_breakpoint_hit();
-        
+
     n_cycles += current_steps;
     check_for_dmi_regions();
     step = false;
 }
-
 
 void PydrofoilCore::handle_breakpoint_hit()
 {
@@ -316,11 +308,10 @@ void PydrofoilCore::handle_breakpoint_hit()
     notify_breakpoint_hit(pc_val);
 }
 
-
-bool PydrofoilCore::insert_breakpoint(vcml::u64 addr) 
+bool PydrofoilCore::insert_breakpoint(vcml::u64 addr)
 {
-    PythonTask task;
-    task.py_funct = Funct::SetBrkp;
+    backend::PythonTask task;
+    task.py_funct = backend::Funct::SetBrkp;
     task.arg = addr;
     std::future<uint64_t> done = task.result.get_future();
 
@@ -333,11 +324,10 @@ bool PydrofoilCore::insert_breakpoint(vcml::u64 addr)
     return done.get();
 }
 
-
-bool PydrofoilCore::remove_breakpoint(vcml::u64 addr) 
+bool PydrofoilCore::remove_breakpoint(vcml::u64 addr)
 {
-    PythonTask task;
-    task.py_funct = Funct::RemoveBrkp;
+    backend::PythonTask task;
+    task.py_funct = backend::Funct::RemoveBrkp;
     task.arg = addr;
     task.caller_core = this;
     std::future<uint64_t> done = task.result.get_future();
@@ -351,15 +341,13 @@ bool PydrofoilCore::remove_breakpoint(vcml::u64 addr)
     return done.get();
 }
 
-
 // Called from a coroutine
 vcml::u64 PydrofoilCore::cycle_count() const
-{   
+{
     return n_cycles;
 }
 
-
-void PydrofoilCore::reset() 
+void PydrofoilCore::reset()
 {
     // 1. Run the standard VCML reset (clears PC, registers, etc.)
     vcml::processor::reset();
@@ -367,8 +355,8 @@ void PydrofoilCore::reset()
     // 2. Force the Hart ID again
     // This ensures that even if the Python object was recreated,
     // it gets the correct ID before execution starts.
-    PythonTask task;
-    task.py_funct = Funct::SetHartId;
+    backend::PythonTask task;
+    task.py_funct = backend::Funct::SetHartId;
     task.arg = m_hart_id; // Use the member variable we saved
     task.caller_core = this;
     std::cout << "DEBUG: Calling set_hartid in reset with hart_id:----------------------------- " << m_hart_id << std::endl;
@@ -408,9 +396,9 @@ void PydrofoilCore::set_pc(vcml::u64 value)
 
 void PydrofoilCore::set_verbosity(bool value)
 {
-    PythonTask task;
-    task.py_funct = Funct::SetVerbosity;
-    task.arg = (bool)value;
+    backend::PythonTask task;
+    task.py_funct = backend::Funct::SetVerbosity;
+    task.arg = (uint32_t) value;
     task.caller_core = this;
     std::future<uint64_t> done = task.result.get_future();
 
@@ -423,12 +411,12 @@ void PydrofoilCore::set_verbosity(bool value)
     done.get(); // Wait for the result
 }
 
-void PydrofoilCore::global_python_worker_loop() {
-    // Da create_handlers() kein Argument mehr braucht, rufen wir es einfach auf
-    std::unordered_map<Funct, std::function<void(PythonTask&)>> handlers = create_handlers();
+void PydrofoilCore::global_python_worker_loop()
+{
+    std::unordered_map<backend::Funct, std::function<void(backend::PythonTask&)>> handlers = backend::create_handlers();
 
     while(true) {
-        PythonTask task;
+        backend::PythonTask task;
 
         {   
             std::unique_lock<std::mutex> lock(global_task_mutex); 
@@ -448,13 +436,12 @@ void PydrofoilCore::global_python_worker_loop() {
     }
 }
 
-
 void PydrofoilCore::end_of_elaboration()
 {
     processor::end_of_elaboration();
 
-    PythonTask task;
-    task.py_funct = Funct::SetCb;
+    backend::PythonTask task;
+    task.py_funct = backend::Funct::SetCb;
     task.caller_core = this;
     std::future<uint64_t> done = task.result.get_future();
     
@@ -464,5 +451,7 @@ void PydrofoilCore::end_of_elaboration()
         global_task_queue.push(std::move(task));
     }
     global_task_cv.notify_one();; // notify the waiting thread
-    done.get(); // Wait for the result
+    done.get();           // Wait for the result
 }
+
+} // namespace core
