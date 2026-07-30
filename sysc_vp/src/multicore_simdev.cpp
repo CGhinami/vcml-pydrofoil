@@ -67,8 +67,8 @@ multicore_simdev::multicore_simdev(const sc_module_name& nm, unsigned int num_co
     // <-- NEU: Öffne die beiden Textdateien
     // std::ios::trunc sorgt dafür, dass alte Logs bei Neustart gelöscht werden
     if (write_to_file) {
-        m_out_core0.open("core0_output.txt", std::ios::out | std::ios::trunc);
-        m_out_core1.open("core1_output.txt", std::ios::out | std::ios::trunc);
+        m_out_core0.open("logs/core0_output.txt", std::ios::out | std::ios::trunc);
+        m_out_core1.open("logs/core1_output.txt", std::ios::out | std::ios::trunc);
     }
 }
 

@@ -16,23 +16,23 @@ fi
 
 if [[ "$CONTAINER_PROGRAM" == "docker" ]]; then
 
-	if command -v docker &> /dev/null; then
-		CONTAINER_PROGRAM_FLAGS="--user $(id -u):$(id -g)"
-		echo "Using docker"
-	else
-		echo "Docker was selected but it is not installed. Exiting..."
-		exit 1
-	fi
+    if command -v docker &> /dev/null; then
+        CONTAINER_PROGRAM_FLAGS="--user $(id -u):$(id -g)"
+        echo "Using docker"
+    else
+        echo "Docker was selected but it is not installed. Exiting..."
+        exit 1
+    fi
 
 elif [[ "$CONTAINER_PROGRAM" == "podman" ]]; then
 
-	if command -v podman &> /dev/null; then
-		CONTAINER_PROGRAM_FLAGS="--userns keep-id"
-		echo "Using podman"
-	else
-		echo "Podman was selected but it is not installed. Exiting..."
-		exit 1
-	fi
+    if command -v podman &> /dev/null; then
+        CONTAINER_PROGRAM_FLAGS="--userns keep-id"
+        echo "Using podman"
+    else
+        echo "Podman was selected but it is not installed. Exiting..."
+        exit 1
+    fi
 fi
 
 IMAGE_NAME="vcml-pydrofoil:latest"
@@ -53,12 +53,14 @@ if [[ -n "$CFG_FILE" ]]; then
         --rm \
         $INTERACTIVE_FLAGS \
         -v "$(dirname "$(realpath "$CFG_FILE")"):/configs:ro" \
+        -v "$(pwd)/logs:/vcml-pydrofoil/logs" \
         "$IMAGE_NAME" \
         "$CFG_BASENAME"
 else
     $CONTAINER_PROGRAM run \
         $CONTAINER_PROGRAM_FLAGS \
         --rm \
+        -v "$(pwd)/logs:/vcml-pydrofoil/logs" \
         $INTERACTIVE_FLAGS \
         "$IMAGE_NAME"
 fi
