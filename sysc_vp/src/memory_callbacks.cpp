@@ -31,6 +31,9 @@ int write_mem(void* cpu, uint64_t address, int size, uint64_t value, void* paylo
         std::lock_guard lock(core->memtask_mutex);
         core->memtask_queue.push(std::move(memtask));
     }
+    std::cout << "memtask for core: " << core->get_hart_id() 
+              << " put into the queue, address: 0x" 
+              << std::hex << memtask.addr << std::dec << std::endl;
     core->memtask_cv.notify_one();
 
     return res.get() ? 0 : 1;
@@ -54,6 +57,9 @@ int read_mem(void* cpu, uint64_t address, int size, void* destination, void* pay
         std::lock_guard lock(core->memtask_mutex);
         core->memtask_queue.push(std::move(memtask));
     }
+    std::cout << "memtask for core: " << core->get_hart_id() 
+              << " put into the queue, address: 0x" 
+              << std::hex << memtask.addr << std::dec << std::endl;
     core->memtask_cv.notify_one();
 
     return res.get() ? 0 : 1;

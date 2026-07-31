@@ -17,6 +17,7 @@ system::system(const sc_core::sc_module_name& nm):
     bram("bram", {BOOT_LO, BOOT_HI}),
     addr_uart0("addr_uart0", {UART0_LO, UART0_HI}),
     addr_plic("addr_plic", {PLIC_LO, PLIC_HI}),
+    addr_clint("addr_clint", {CLINT_LO, CLINT_HI}),
     addr_simdev("addr_simdev", {SIMDEV_LO, SIMDEV_HI}),
     irq_uart0("irq_uart0", IRQ_UART0),
     addr_multicore_simdev("addr_multicore_simdev", {MULTICORE_SIMDEV_LO, MULTICORE_SIMDEV_HI}),
@@ -29,6 +30,7 @@ system::system(const sc_core::sc_module_name& nm):
     m_reset("rst"),
     m_uart0("uart0"),
     m_plic("plic"),
+    m_clint("clint"),
     m_core("core", 0),
     m_core2("core2", 1),
     m_simdev("simdev"),
@@ -45,6 +47,7 @@ system::system(const sc_core::sc_module_name& nm):
     tlm_bind(m_bus, m_core2, "data");
     tlm_bind(m_bus, m_simdev, "in", addr_simdev);
     tlm_bind(m_bus, m_multicore_simdev, "in", addr_multicore_simdev);
+    tlm_bind(m_bus, m_clint, "in", addr_clint);
 
     tlm_bind(m_bus, m_core, "insn");
     tlm_bind(m_bus, m_core, "data");
@@ -59,6 +62,7 @@ system::system(const sc_core::sc_module_name& nm):
     clk_bind(m_clock_cpu, "clk", m_uart0, "clk");
     clk_bind(m_clock_cpu, "clk", m_simdev, "clk");
     clk_bind(m_clock_cpu, "clk", m_multicore_simdev, "clk");
+    clk_bind(m_clock_cpu, "clk", m_clint, "clk");
 
     gpio_bind(m_reset, "rst", m_core, "rst");
     gpio_bind(m_reset, "rst", m_core2, "rst");
@@ -72,10 +76,16 @@ system::system(const sc_core::sc_module_name& nm):
     gpio_bind(m_reset, "rst", m_multicore_simdev, "rst");
     // Connect the uart irq to the plic (target socket)
     gpio_bind(m_uart0, "irq", m_plic, "irqs", IRQ_UART0);
+    gpio_bind(m_reset, "rst", m_clint, "rst");
 
     // Connect the core irq to the plic (init socket)
     // gpio_bind(m_core, "irq", m_plic, "irqt"); // is this correct? does gpio bind work with arrays?
     m_plic.irqt[0].bind(m_core.irq[0]);
+
+    m_clint.irq_sw[0].bind(m_core.irq[core::MSIP]); 
+    m_clint.irq_sw[1].bind(m_core2.irq[core::MSIP]);
+    m_clint.irq_timer[0].bind(m_core.irq[core::MTIP]);
+    m_clint.irq_timer[1].bind(m_core2.irq[core::MTIP]);
 
     serial_bind(m_term, "serial_tx", m_uart0, "serial_rx");
     serial_bind(m_term, "serial_rx", m_uart0, "serial_tx");

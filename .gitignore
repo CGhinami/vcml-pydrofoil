@@ -15,3 +15,6 @@ _pydrofoilcapi_cffi.*
 **/build/
 **/bin/
 logs/
+libpydrofoilcapi_cffi.so
+log.txt
+pypy-pydrofoil-scripting-experimental.tar-2.bz2

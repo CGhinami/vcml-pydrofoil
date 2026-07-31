@@ -32,6 +32,7 @@ PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name, uint64_t hart_
     core_arch(arch_name.c_str(), arch_name == "rv64" ? 64 : 32, architecture::regdb_riscv, 33),
     m_hart_id(hart_id)
 {
+    
     mwr::log_info("Running with arch: %d bit", 8 * core_arch.word_size());
     set_little_endian(); // Otherwise the gdbserver inverts the bytes it reads
 
@@ -122,17 +123,26 @@ void PydrofoilCore::shutdown_worker()
     }
 }
 
+uint64_t PydrofoilCore::get_hart_id() {
+    return m_hart_id;
+}
+
 void PydrofoilCore::notify_pending_irq(bool set)
 {
-    size_t mip_val;
-    if (irq_num == MEIP)
+    size_t mip_val = 0;
+    if(irq_num == MEIP)
         mip_val = set ? (MEIP_BIT) : 0;
-    else if (irq_num == SEIP)
+    else if(irq_num == SEIP)
         mip_val = set ? (SEIP_BIT) : 0;
+    else if(irq_num == MSIP)
+        mip_val = set ? (MSIP_BIT) : 0;
+    else if(irq_num == MTIP)
+        mip_val = set ? (MTIP_BIT) : 0;
 
     backend::PythonTask task;
     task.py_funct = backend::Funct::SetMIP;
     task.arg = mip_val;
+    task.caller_core = this;
     std::future<uint64_t> done = task.result.get_future();
 
     {
@@ -146,6 +156,7 @@ void PydrofoilCore::notify_pending_irq(bool set)
 
 void PydrofoilCore::interrupt(size_t irq, bool set)
 {
+    std::cout<< "interrupt: " << irq << std::endl;
     is_irq_pending = set;
     irq_num = irq;
 }
@@ -239,6 +250,7 @@ void PydrofoilCore::check_for_dmi_regions()
 void PydrofoilCore::simulate(size_t cycles)
 {
     if(is_irq_pending.has_value()) {
+        std::cout<< "simualte irq rest------------------------------------" << std::endl;
         notify_pending_irq(is_irq_pending.value());
         is_irq_pending.reset();
     }
@@ -276,15 +288,16 @@ void PydrofoilCore::simulate(size_t cycles)
 
         bool success = false;
         if(memtask.type == MemTask::Read) {
-            success = (data.read(memtask.addr, memtask.dest, memtask.size, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE);
+            success = (data.read(memtask.addr, memtask.dest, memtask.size, vcml::SBI_DEBUG) == tlm::TLM_OK_RESPONSE);
             // memset(memtask.dest,0x297,8); // To be removed once the 0x1000 initial accesses are fixed
         } else
-            success = (data.write(memtask.addr, &memtask.value, memtask.size, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE);
+            success = (data.write(memtask.addr, &memtask.value, memtask.size, vcml::SBI_DEBUG) == tlm::TLM_OK_RESPONSE);
 
         if(!success)
             mwr::log_info("Memory access failed with address: %lx", memtask.addr);
 
         memtask.result.set_value(success);
+        std::cout << "Memtask for core: " << m_hart_id << "is executed" << std::endl; 
     }
 
     size_t current_steps = done.get();
@@ -313,6 +326,7 @@ bool PydrofoilCore::insert_breakpoint(vcml::u64 addr)
     backend::PythonTask task;
     task.py_funct = backend::Funct::SetBrkp;
     task.arg = addr;
+    task.caller_core = this;
     std::future<uint64_t> done = task.result.get_future();
 
     {

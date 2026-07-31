@@ -19,13 +19,13 @@
 namespace virtual_platform {
 
 enum : mwr::u64 {
-    SRAM_SZ = 256 * mwr::KiB,
-    SRAM_LO = 0x80000000,
-    SRAM_HI = SRAM_LO + SRAM_SZ - 1,
+    // SRAM_SZ = 256 * mwr::KiB,
+    // SRAM_LO = 0x80000000,
+    // SRAM_HI = SRAM_LO + SRAM_SZ - 1,
 
-    BOOT_SZ = 4 * mwr::KiB,
-    BOOT_LO = 0x00001000,
-    BOOT_HI = BOOT_LO + BOOT_SZ - 1,
+    // BOOT_SZ = 4 * mwr::KiB,
+    // BOOT_LO = 0x00001000,
+    // BOOT_HI = BOOT_LO + BOOT_SZ - 1,
 
     MULTICORE_SIMDEV_LO = 0x10000000,
     MULTICORE_SIMDEV_HI = MULTICORE_SIMDEV_LO + 0x1000 - 1,
@@ -33,11 +33,34 @@ enum : mwr::u64 {
     SIMDEV_LO = 0x10008000,
     SIMDEV_HI = SIMDEV_LO + 0x1000 - 1,
 
-    UART0_LO = 0x10009000,
+    // UART0_LO = 0x10009000,
+    // UART0_HI = UART0_LO + 0x1000 - 1,
+
+    // PLIC_LO = 0x1000a000,
+    // PLIC_HI = PLIC_LO + 0x224FFF - 1,
+
+    // CLINT_LO = 0x15000000,
+    // CLINT_HI = CLINT_LO + 0x10000 - 1,
+
+
+    SRAM_SZ = 128 * mwr::KiB,
+    SRAM_LO = 0x80000000,
+    SRAM_HI = SRAM_LO + SRAM_SZ - 1,
+
+    BOOT_SZ = 4 * mwr::KiB,
+    BOOT_LO = 0x00001000,
+    BOOT_HI = BOOT_LO + BOOT_SZ - 1,
+
+    UART0_LO = 0x80020000,
     UART0_HI = UART0_LO + 0x1000 - 1,
 
-    PLIC_LO = 0x1000a000,
-    PLIC_HI = PLIC_LO + 0x224FFF - 1,
+    PLIC_LO = 0x80021000,
+    PLIC_HI = PLIC_LO + 0x202000 -1,
+
+    CLINT_LO = 0x80400000,
+    CLINT_HI = CLINT_LO + 0x10000 - 1 // 64KB large
+
+
 };
 
 enum : mwr::u64 { IRQ_UART0 = 5 };
@@ -49,13 +72,14 @@ class system : public vcml::system {
     using u64 = vcml::u64;
     using range = vcml::range;
 
-  vcml::property<range> ram;
-  vcml::property<range> bram;
-  vcml::property<range> addr_uart0;
-  vcml::property<range> addr_plic;
-  vcml::property<vcml::range> addr_simdev;
-  vcml::property<vcml::range> addr_multicore_simdev;
-  vcml::property<int>   irq_uart0;
+    vcml::property<range> ram;
+    vcml::property<range> bram;
+    vcml::property<range> addr_uart0;
+    vcml::property<range> addr_plic;
+    vcml::property<range> addr_clint;
+    vcml::property<vcml::range> addr_simdev;
+    vcml::property<vcml::range> addr_multicore_simdev;
+    vcml::property<int>   irq_uart0;
 
     system(const sc_core::sc_module_name& nm);
     virtual ~system();
@@ -83,6 +107,7 @@ class system : public vcml::system {
 
     vcml::serial::nrf51 m_uart0;
     vcml::riscv::plic m_plic;
+    vcml::riscv::clint m_clint;
 
     vcml::serial::terminal m_term;
 };

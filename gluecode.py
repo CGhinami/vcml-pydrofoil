@@ -81,6 +81,7 @@ class C:
         self.cpu.step()
 
     def reset(self):
+        print("self.rv64 has value", self.rv64)
         if self.rv64:
             cls = _pydrofoil.RISCV64
         else:
@@ -90,8 +91,10 @@ class C:
         else:
             self.cpu = cls(self.arg)
         self.steps = 0
-        self.cpu._set_sail_memory_bounds(0x00000000, 0x4000000000)
+        self.cpu._set_sail_memory_bounds(0x00000000, 0x100000000)
         self.set_verbosity(self.verbosity)
+        self.cpu._set_htif_tohost(0x900F0000)
+        self.cpu.write_register('pc', 0x80002000)
      
     def set_hartid(self, hartid):
         try:
@@ -200,9 +203,11 @@ def pydrofoil_cpu_read_reg(i, name):
 
 @ffi.def_extern()
 def pydrofoil_set_interrupt_pending(i, value):
+    print("caling----------------------------------------------------------------------")
     cpu = ffi.from_handle(i)
 
     bit_size = 64 if cpu.rv64 else 32
+    print("bitsize: ", bit_size)
 
     if value > 0:
         cpu.cpu.write_register('mip', _pydrofoil.bitvector(bit_size, 1) << value)

@@ -73,6 +73,7 @@ auto create_handlers() -> std::unordered_map<Funct, std::function<void(PythonTas
         {
             Funct::Simulate, [](PythonTask &task){
                 core::PydrofoilCore* core = task.caller_core;
+                std::cout<< "Core " << core->get_hart_id() << "STARTED Python task: Funct::Simulate" << std::endl;
                 #if PROFILING
                     Profiler t("Simulate");
                 #endif
@@ -83,6 +84,7 @@ auto create_handlers() -> std::unordered_map<Funct, std::function<void(PythonTas
                 }
                 task.result.set_value(n_steps); 
                 core->memtask_cv.notify_one();
+                std::cout<< "Core " << core->get_hart_id() << "FINISHED Python task: Funct::Simulate" << std::endl;
             }
         },
         {
@@ -150,6 +152,7 @@ auto create_handlers() -> std::unordered_map<Funct, std::function<void(PythonTas
         },
         {
             Funct::SetMIP, [](PythonTask &task){
+                std::cout <<"calling setMIP" << std::endl;
                 core::PydrofoilCore* core = task.caller_core;
                 #if PROFILING
                     Profiler t("RaiseIrq");
