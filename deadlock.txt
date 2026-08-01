@@ -1,0 +1,40 @@
+I am glad to hear the fix worked! This was a notoriously tricky bug because it sits right at the intersection of two completely different threading models: C++ OS Threads and SystemC Cooperative Threads.
+
+Here is the detailed breakdown of exactly what went wrong and why that one word (SBI_DEBUG) fixed it.
+
+The Two Worlds of Threading
+To understand the deadlock, you have to look at how your threads are actually mapped to your computer's hardware.
+The Python Worker: This is a real, preemptive OS thread (std::thread).
+The SystemC Kernel: SystemC is single-threaded at the OS level. Core 0 and Core 1 are not real OS threads; they are "coroutines" (or fibers) managed by the SystemC scheduler. They take turns running on a single OS thread using cooperative multitasking.
+In a cooperative model, Core 0 runs until it explicitly tells the scheduler, "I am taking a break, let someone else run." It does this by calling sc_core::wait().
+
+The Deadlock Sequence
+Here is the exact timeline of how these threads tied themselves into a knot right after printing "S":
+Core 1 Requests Memory: The Python Worker is simulating Core 1. Core 1 needs to read the CLINT (0x80400000). Python queues the memory task and pauses, waiting for C++ to fetch the data.
+Core 1 Yields the Scheduler (The Fatal Step): The SystemC thread running Core 1 wakes up, takes the task, and calls data.read(..., vcml::SBI_NONE).
+SBI_NONE tells VCML to do a standard blocking TLM transaction (b_transport).
+The CLINT module receives the read request. To simulate hardware latency, the CLINT calls sc_core::wait(delay).
+Because wait() was called, SystemC pauses Core 1 and switches execution to Core 0.
+Core 0 Freezes the OS Thread: Core 0 wakes up and enters simulate(). It sends its own simulation task to Python. Then, Core 0 hits this line:
+memtask_cv.wait(lock, ...);
+This is a C++ std::condition_variable. It is an OS-level blocking call, not a SystemC yield.
+Core 0 literally puts the entire SystemC OS thread to sleep.
+The Mexican Standoff (Deadlock):
+Core 1 cannot finish reading the CLINT because it is waiting for the SystemC scheduler to wake it back up.
+The SystemC Scheduler cannot run because Core 0 put the underlying OS thread to sleep.
+The Python Worker cannot simulate Core 0 because it is stuck waiting for Core 1's memory read to finish.
+Everything stopped.
+
+Why SBI_DEBUG Fixed It
+By changing the access flag to vcml::SBI_DEBUG, you changed how VCML routes the memory request.
+
+Instead of routing it as a normal simulated bus transaction (b_transport), VCML routes it as a Debug Transaction (transport_dbg).
+
+In the SystemC TLM standard, debug transactions have a strict rule: They must execute instantly in zero simulated time, and they are forbidden from calling sc_core::wait().
+
+When Core 1 reads the CLINT using SBI_DEBUG:
+The read happens instantly.
+The CLINT is not allowed to call sc_core::wait().
+Because wait() is never called, the SystemC scheduler never context-switches to Core 0.
+Core 1 finishes the read, returns the data to Python, and Python continues simulating Core 1 seamlessly.
+By preventing that mid-transaction context switch, you kept the C++ threads and the SystemC scheduler in perfect sync.

@@ -92,7 +92,7 @@ PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name, uint64_t hart_
 
     for(size_t i = 0; i < core_arch.reg_number(); ++i)
         define_cpureg_rw(i, core_arch.get_regs_ptr()[i].gdb_name, core_arch.word_size());
-    std::cout << "DEBUG: C++ Constructor for " << name << " has hart_id: " << m_hart_id << " hart_id value is: " << hart_id << std::endl;
+    // std::cout << "DEBUG: C++ Constructor for " << name << " has hart_id: " << m_hart_id << " hart_id value is: " << hart_id << std::endl;
 }
 
 void PydrofoilCore::test_reg_access(size_t regno)
@@ -146,6 +146,10 @@ void PydrofoilCore::notify_pending_irq(bool set)
         mip_val = set ? (MEIP_BIT) : 0;
     else if (irq_num == SEIP)
         mip_val = set ? (SEIP_BIT) : 0;
+    else if(irq_num == MSIP)
+        mip_val = set ? (MSIP_BIT) : 0;
+    else if(irq_num == MTIP)
+        mip_val = set ? (MTIP_BIT) : 0;
 
     backend::PythonTask task;
     task.py_funct = backend::Funct::SetMIP;
@@ -157,7 +161,6 @@ void PydrofoilCore::notify_pending_irq(bool set)
         task_queue.push(std::move(task));
     }
     task_cv.notify_one(); // notify the waiting thread
-    done.get();           // Wait for the result
     done.get();           // Wait for the result
 }
 
@@ -326,6 +329,68 @@ void PydrofoilCore::simulate(size_t cycles)
     step = false;
 }
 
+// void PydrofoilCore::simulate(size_t cycles)
+// {
+//     if(is_irq_pending.has_value()) {
+//         notify_pending_irq(is_irq_pending.value());
+//         is_irq_pending.reset();
+//     }
+
+//     backend::PythonTask task;
+//     task.py_funct = backend::Funct::Simulate;
+//     task.arg = step ? 1 : cycles;
+//     std::future<uint64_t> done = task.result.get_future();
+
+//     {
+//         std::lock_guard lock(task_mutex);
+//         task_queue.push(std::move(task));
+//     }
+//     std::cout << "DEBUG: C++ simulate() called on core with hart id " << m_hart_id << std::endl;
+//     task_cv.notify_one(); // notify the waiting thread
+
+//     while(done.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
+//         MemAccess memtask;
+
+//         {
+//             std::unique_lock<std::mutex> lock(memtask_mutex);
+//             memtask_cv.wait(lock, [&]
+//                             { return !memtask_queue.empty() ||
+//                                      (done.wait_for(std::chrono::seconds(0)) == std::future_status::ready); });
+
+//             if (!memtask_queue.empty())
+//             {
+//                 memtask = std::move(memtask_queue.front());
+//                 memtask_queue.pop();
+//             }
+//             else
+//                 continue;
+//         }
+
+//         bool success = false;
+//         if(memtask.type == MemTask::Read) {
+//             success = (data.read(memtask.addr, memtask.dest, memtask.size, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE);
+//             // memset(memtask.dest,0x297,8); // To be removed once the 0x1000 initial accesses are fixed
+//             std::cout << "handling memtask for hart" << m_hart_id << std::endl;
+//         } else {
+//             success = (data.write(memtask.addr, &memtask.value, memtask.size, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE);
+//             std::cout << "handling memtask for hart" << m_hart_id << std::endl;
+//         }
+//         if (!success)
+//             mwr::log_info("Memory access failed with address: %lx", memtask.addr);
+
+//         memtask.result.set_value(success);
+//     }
+
+//     size_t current_steps = done.get();
+//     bool brkpt_hit = current_steps > 0 && current_steps < cycles;
+
+//     if(!step && brkpt_hit)
+//         handle_breakpoint_hit();
+
+//     n_cycles += current_steps;
+//     check_for_dmi_regions();
+//     step = false;
+// }
 
 void PydrofoilCore::handle_breakpoint_hit()
 {
@@ -386,7 +451,7 @@ void PydrofoilCore::reset()
     backend::PythonTask task;
     task.py_funct = backend::Funct::SetHartId;
     task.arg = m_hart_id; // Use the member variable we saved
-    std::cout << "DEBUG: Calling set_hartid in reset with hart_id:----------------------------- " << m_hart_id << std::endl;
+    // std::cout << "DEBUG: Calling set_hartid in reset with hart_id:----------------------------- " << m_hart_id << std::endl;
 
     std::future<uint64_t> done = task.result.get_future();
     {
@@ -460,8 +525,10 @@ void PydrofoilCore::python_worker_loop()
         } // --> lock released (out of scope)
 
         auto it = handlers.find(task.py_funct);
-        if (it != handlers.end())
+        if (it != handlers.end()) {
+            // std::cout << "DEBUG: Handling task for hart " << m_hart_id << " with function " << static_cast<int>(task.py_funct) << std::endl;
             it->second(task);
+        }
     }
 }
 

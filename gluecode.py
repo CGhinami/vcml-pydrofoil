@@ -91,8 +91,10 @@ class C:
         else:
             self.cpu = cls(self.arg)
         self.steps = 0
-        self.cpu._set_sail_memory_bounds(0x00000000, 0x4000000000)
+        self.cpu._set_sail_memory_bounds(0x00000000, 0x1000000000)
         self.set_verbosity(self.verbosity)
+        self.cpu._set_htif_tohost(0x900F0000)
+        self.cpu.write_register('pc', 0x80002000)
         # print("\n--- self.cpu.lowlevel Members and Methods ---")
         # if hasattr(self.cpu, 'lowlevel'):
         #     for item in dir(self.cpu.lowlevel):

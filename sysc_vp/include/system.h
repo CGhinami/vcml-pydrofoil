@@ -39,6 +39,9 @@ enum : mwr::u64 {
 
     PLIC_LO = 0x1000a000,
     PLIC_HI = PLIC_LO + 0x224FFF - 1,
+
+    CLINT_LO = 0x80400000,
+    CLINT_HI = CLINT_LO + 0x10000 - 1 // 64KB large
 };
 
 enum : mwr::u64 { IRQ_UART0 = 5 };
@@ -57,6 +60,7 @@ class system : public vcml::system {
   vcml::property<vcml::range> addr_simdev;
   vcml::property<vcml::range> addr_multicore_simdev;
   vcml::property<int>   irq_uart0;
+  vcml::property<range> addr_clint;
 
     system(const sc_core::sc_module_name& nm);
     virtual ~system();
@@ -84,6 +88,7 @@ class system : public vcml::system {
 
   vcml::serial::nrf51 m_uart0;
   vcml::riscv::plic m_plic;
+  vcml::riscv::clint m_clint;
 
   vcml::serial::terminal m_term;
 };

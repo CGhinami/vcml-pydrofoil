@@ -16,3 +16,5 @@ _pydrofoilcapi_cffi.*
 **/bin/
 benchmark/dhrystone_2cores/build
 logs/
+pypy-pydrofoil-scripting-experimental.tar-2.bz2
+libpydrofoilcapi_cffi.so

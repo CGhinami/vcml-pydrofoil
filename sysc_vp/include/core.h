@@ -26,12 +26,16 @@ namespace core {
 
 enum : size_t {
     MEIP = 0, // irq for machine-level external interrupts
-    SEIP = 1  // irq for supervisor-level external interrupts
+    SEIP = 1,  // irq for supervisor-level external interrupts
+    MSIP = 2, // NEW: irq for machine-level software interrupts (IPIs for SMP!)
+    MTIP = 3
 };
 
 enum : size_t {
     MEIP_BIT = 11, // interrupt-pending bit for machine-level external interrupts
-    SEIP_BIT = 9   // interrupt-pending bit for supervisor-level external interrupts
+    SEIP_BIT = 9,   // interrupt-pending bit for supervisor-level external interrupts
+    MSIP_BIT = 3,  // NEW: RISC-V standard bit for Machine Software Interrupts
+    MTIP_BIT = 7   // NEW: RISC-V standard bit for Machine Timer Interrupts
 };
 
 class PydrofoilCore : public vcml::processor
@@ -111,7 +115,7 @@ public:
     virtual bool insert_breakpoint(vcml::u64 addr) override;
     virtual bool remove_breakpoint(vcml::u64 addr) override;
     void sc_sync_catch_ex(std::function<void(void)> job);
-
+    uint64_t m_hart_id;
 private:
     bool step;
 
@@ -131,7 +135,7 @@ private:
     void python_worker_loop();
 
     void handle_breakpoint_hit();
-    uint64_t m_hart_id;
+
 
     protected:
     virtual void end_of_elaboration() override;
