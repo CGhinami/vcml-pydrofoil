@@ -76,6 +76,7 @@ system::system(const sc_core::sc_module_name &nm)
   // Connect the core irq to the plic (init socket)
   //  gpio_bind(m_core, "irq", m_plic, "irqt"); // is this correct? does gpio bind work with arrays?
   m_plic.irqt[0].bind(m_core.irq[0]);
+  m_plic.irqt[1].bind(m_core2.irq[0]);
   m_clint.irq_sw[0].bind(m_core.irq[core::MSIP]); 
   m_clint.irq_sw[1].bind(m_core2.irq[core::MSIP]);
   m_clint.irq_timer[0].bind(m_core.irq[core::MTIP]);
@@ -102,7 +103,7 @@ int system::run()
 {
   double simstart = mwr::timestamp();
   int result = vcml::system::run();
-  double realtime = mwr::timestamp() - simstart;
+  double realtime = mwr::timestamp() - m_multicore_simdev.last_queried_time; // Use the last queried time for runtime calculation
   double duration = sc_core::sc_time_stamp().to_seconds();
   vcml::u64 ninsn = m_core.cycle_count() + m_core2.cycle_count(); 
 

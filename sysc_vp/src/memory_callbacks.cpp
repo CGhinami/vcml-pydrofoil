@@ -32,9 +32,9 @@ int write_mem(void* cpu, uint64_t address, int size, uint64_t value, void* paylo
         core->memtask_queue.push(std::move(memtask));
     }
     core->memtask_cv.notify_one();
-    if (memtask.addr == 0x8002051c) {
-        std::cout << "DEBUG:: CORE " << core->m_hart_id << "writes to uart " << std::hex << memtask.value << std::dec << std::endl;
-    }
+    // if (memtask.addr == 0x8002051c) {
+    //     std::cout << "DEBUG:: CORE " << core->m_hart_id << "writes to uart " << std::hex << memtask.value << std::dec << std::endl;
+    // }
     // std::cout << "DEBUG: waiting for handle of memtask on core " << core->m_hart_id << std::endl;
     return res.get() ? 0 : 1;
 }

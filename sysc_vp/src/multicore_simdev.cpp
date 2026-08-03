@@ -44,6 +44,13 @@ void multicore_simdev::write_sout1(u32 val) {
     }
 }
 
+u64 multicore_simdev::read_hclk() {
+    double time = mwr::timestamp(); 
+    vcml::log_info("  runtime        : %.4fs", time);
+    last_queried_time = time;
+    return time;
+}
+
 multicore_simdev::multicore_simdev(const sc_module_name& nm, unsigned int num_cores):
     peripheral(nm),
     write_to_file("write_to_file", true),
@@ -52,6 +59,7 @@ multicore_simdev::multicore_simdev(const sc_module_name& nm, unsigned int num_co
     core_done("core_done", 0x00, 0),
     sout0("sout0", 0x08, 0), // <-- Initialisiere Core 0 Output
     sout1("sout1", 0x0C, 0), // <-- Initialisiere Core 1 Output (4 Byte weiter!)
+    hclk("hclk", 0x20, 0),
     in("in") 
 {
     // Configure registers
@@ -63,6 +71,9 @@ multicore_simdev::multicore_simdev(const sc_module_name& nm, unsigned int num_co
 
     sout1.allow_read_write();
     sout1.on_write(&multicore_simdev::write_sout1);
+
+    hclk.allow_read_write();
+    hclk.on_read(&multicore_simdev::read_hclk);
 
     // <-- NEU: Öffne die beiden Textdateien
     // std::ios::trunc sorgt dafür, dass alte Logs bei Neustart gelöscht werden

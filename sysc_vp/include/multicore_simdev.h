@@ -29,20 +29,22 @@ private:
     // Disabled constructors
     multicore_simdev();
     multicore_simdev(const multicore_simdev&);
-
-public:
+    u64 read_hclk();
+    public:
     // Registers
     reg<u32> core_done; // Offset: 0x00
     reg<u32> sout0;     // Offset: 0x08 <-- NEU: Register Core 0
     reg<u32> sout1;     // Offset: 0x0C <-- NEU: Register Core 1
+    reg<u64> hclk;
     vcml::property<bool> write_to_file;
     // TLM Socket for the bus
     tlm_target_socket in;
-
+    
     multicore_simdev(const sc_module_name& name, unsigned int num_cores); 
     virtual ~multicore_simdev();
     
     VCML_KIND(multicore_simdev);
+    double last_queried_time;
 
     virtual void reset() override;
 };
