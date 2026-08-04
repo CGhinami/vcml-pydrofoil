@@ -46,7 +46,7 @@ void multicore_simdev::write_sout1(u32 val) {
 
 u64 multicore_simdev::read_hclk() {
     double time = mwr::timestamp(); 
-    vcml::log_info("  runtime        : %.4fs", time);
+    // vcml::log_info("  runtime        : %.4fs", time);
     last_queried_time = time;
     return time;
 }
