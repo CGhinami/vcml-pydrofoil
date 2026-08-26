@@ -306,11 +306,32 @@ void PydrofoilCore::simulate(size_t cycles)
         bool success = false;
         if (memtask.type == MemTask::Read)
         {
-            sc_sync_catch_ex([&](){ success = (data.read(memtask.addr, memtask.dest, memtask.size, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE); });
+            if (vcml::is_thread())
+            {
+                success = (data.read(memtask.addr, memtask.dest, memtask.size, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE);
+            }
+            else
+            {
+                // mwr::log_info("os thread!");
+                sc_sync_catch_ex([&]()
+                                 { success = (data.read(memtask.addr, memtask.dest, memtask.size, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE); });
+            }
         }
+
+        // hier muss umbedingt die Fallunerscheidung fpr async false zurück kommen
+
         else
         {
-            sc_sync_catch_ex([&](){ success = (data.write(memtask.addr, &memtask.value, memtask.size, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE); });
+             if (vcml::is_thread())
+            {
+                success = (data.write(memtask.addr, &memtask.value, memtask.size, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE);
+            }
+            else
+            {
+                // mwr::log_info("os thread!");
+                sc_sync_catch_ex([&]()
+                                 { success = (data.write(memtask.addr, &memtask.value, memtask.size, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE); });
+            }
         }
         if (!success)
             mwr::log_info("Memory access failed with address: %lx", memtask.addr);

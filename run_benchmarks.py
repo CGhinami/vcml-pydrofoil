@@ -7,8 +7,8 @@ import time
 from datetime import datetime
 
 # Konfiguration
-NUM_RUNS = 2
-LAUNCH_SCRIPT = "./container_run_simulator.sh"
+NUM_RUNS = 5
+LAUNCH_SCRIPT = "./launch.sh"
 
 def run_benchmark(cfg_file, run_index):
     print(f"[{run_index}/{NUM_RUNS}] Führe Benchmark aus...")
@@ -63,7 +63,7 @@ def main():
     
     # Generiere einen eindeutigen Dateinamen
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    csv_filename = f"1_1000q_elf_static_min{timestamp}.csv"
+    csv_filename = f"2core_dhrystone_asnyc_true.csv"
     
     all_results = []
     
