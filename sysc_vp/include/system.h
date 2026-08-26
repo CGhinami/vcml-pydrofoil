@@ -1,12 +1,3 @@
-/******************************************************************************
- *                                                                            *
- * Copyright 2026 Chiara Ghinami                                              *
- *                                                                            *
- * This software is licensed under the MIT license found in the               *
- * LICENSE file at the root directory of this source tree.                    *
- *                                                                            *
- ******************************************************************************/
-
 #ifndef SYSTEM_H
 #define SYSTEM_H
 
@@ -16,6 +7,10 @@
 #include "uart_injector.h"
 #include "multicore_simdev.h"
 #include <filesystem>
+
+#ifndef NRCPU
+#define NRCPU 4 // Standardwert
+#endif
 
 namespace virtual_platform {
 
@@ -41,17 +36,17 @@ enum : mwr::u64 {
     PLIC_HI = PLIC_LO + 0x224FFF - 1,
 
     CLINT_LO = 0x80400000,
-    CLINT_HI = CLINT_LO + 0x10000 - 1 // 64KB large
+    CLINT_HI = CLINT_LO + 0x10000 - 1 
 };
 
 enum : mwr::u64 { IRQ_UART0 = 5 };
 
 class system : public vcml::system {
-    public:
-    using u16 = vcml::u16;
-    using u32 = vcml::u32;
-    using u64 = vcml::u64;
-    using range = vcml::range;
+public:
+  using u16 = vcml::u16;
+  using u32 = vcml::u32;
+  using u64 = vcml::u64;
+  using range = vcml::range;
 
   vcml::property<range> ram;
   vcml::property<range> bram;
@@ -62,23 +57,34 @@ class system : public vcml::system {
   vcml::property<int>   irq_uart0;
   vcml::property<range> addr_clint;
 
-    system(const sc_core::sc_module_name& nm);
-    virtual ~system();
-    VCML_KIND(sysc_vp::system);
-    // virtual const char *version() const override;
+  system(const sc_core::sc_module_name& nm);
+  virtual ~system();
+  VCML_KIND(sysc_vp::system);
 
-    virtual int run() override;
+  virtual int run() override;
 
- private:
-  core::PydrofoilCore m_core;
+private:
+  // --- Primitiver Ansatz: Feste Member-Variablen ---
+  core::PydrofoilCore m_core0;
+#if NRCPU > 1
+  core::PydrofoilCore m_core1;
+#endif
+#if NRCPU > 2
   core::PydrofoilCore m_core2;
+  core::PydrofoilCore m_core3;
+#endif
+#if NRCPU > 4
+  core::PydrofoilCore m_core4;
+  core::PydrofoilCore m_core5;
+  core::PydrofoilCore m_core6;
+  core::PydrofoilCore m_core7;
+#endif
+
   vcml::generic::bus     m_bus;
   vcml::generic::memory  m_ram;
   vcml::generic::memory  m_bram;
   vcml::meta::multicore_simdev m_multicore_simdev;
 
-  // A throttle ensures the simulation runs 
-  // at a controlled pace, not faster than real time.
   vcml::meta::throttle m_throttle;
   vcml::meta::loader   m_loader;
   vcml::meta::simdev m_simdev;
