@@ -10,6 +10,7 @@
 #include "memory_callbacks.h"
 #include "core.h"
 #include <cstring> // for memset
+#include <iostream>
 
 // C++ member functions cannot be used as callbacks, we need to define C-style functions
 // (not member of the class), but they still need to get access to the class fields
@@ -17,6 +18,10 @@
 int write_mem(void* cpu, uint64_t address, int size, uint64_t value, void* payload)
 {
     auto core = reinterpret_cast<core::PydrofoilCore*>(payload);
+
+    std::cout << "[REQUEST] Hart " << core->m_hart_id << " | WRITE to addr: 0x" << std::hex << address
+              << " | size: " << std::dec << size << " bytes"
+              << " | value: 0x" << std::hex << value << std::dec << std::endl;
 
     core::PydrofoilCore::MemAccess memtask;
 
@@ -32,17 +37,22 @@ int write_mem(void* cpu, uint64_t address, int size, uint64_t value, void* paylo
         core->memtask_queue.push(std::move(memtask));
     }
     core->memtask_cv.notify_one();
-    // if (memtask.addr == 0x8002051c) {
-    //     std::cout << "DEBUG:: CORE " << core->m_hart_id << "writes to uart " << std::hex << memtask.value << std::dec << std::endl;
-    // }
-    // std::cout << "DEBUG: waiting for handle of memtask on core " << core->m_hart_id << std::endl;
-    return res.get() ? 0 : 1;
+
+    bool success = res.get();
+
+    std::cout << "[SUCCEEDED] Hart " << core->m_hart_id << " | WRITE to addr: 0x" << std::hex << address << std::dec
+              << " | status: " << (success ? "OK" : "FAILED") << std::endl;
+
+    return success ? 0 : 1;
 }
 
 // The debug leads to a debug transaction avoid timig annotation --> no wait --> we dont have to be in a sc_thread
 int read_mem(void* cpu, uint64_t address, int size, void* destination, void* payload)
 {
     auto core = reinterpret_cast<core::PydrofoilCore*>(payload);
+
+    std::cout << "[REQUEST] Hart " << core->m_hart_id << " | READ from addr: 0x" << std::hex << address
+              << " | size: " << std::dec << size << " bytes" << std::endl;
 
     core::PydrofoilCore::MemAccess memtask;
 
@@ -58,7 +68,11 @@ int read_mem(void* cpu, uint64_t address, int size, void* destination, void* pay
         core->memtask_queue.push(std::move(memtask));
     }
     core->memtask_cv.notify_one();
-    // std::cout << "DEBUG: waiting for handle of memtask on core " << core->m_hart_id << std::endl;
 
-    return res.get() ? 0 : 1;
+    bool success = res.get();
+
+    std::cout << "[SUCCEEDED] Hart " << core->m_hart_id << " | READ from addr: 0x" << std::hex << address << std::dec
+              << " | status: " << (success ? "OK" : "FAILED") << std::endl;
+
+    return success ? 0 : 1;
 }

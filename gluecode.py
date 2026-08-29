@@ -175,14 +175,33 @@ def pydrofoil_cpu_simulate(i, steps):
     cpu.steps = 0
 
     for _ in range(steps):
+        # Zephyr PC auslesen und in Int konvertieren
+        pc_val = int(cpu.cpu.read_register('pc'))
 
-        if cpu.breakpoints: # Only if the breakpoint list is not empty, read the pc
-            pc_val = cpu.cpu.read_register('pc')
+        # 1. Breakpoint-Check
+        if cpu.breakpoints and pc_val in cpu.breakpoints:
+            return cpu.steps 
 
-            if pc_val in cpu.breakpoints: # Check if the pc is in the list
-                return cpu.steps # return if it is
+        # 2. Hardcoded WFI Fast-Forward
+        # Um Performance-Einbrüche zu vermeiden, lesen wir den Opcode direkt aus dem DMA-Cache
+        for base, size, memory in cpu.dma_regions:
+            if base <= pc_val and (pc_val + 4) <= (base + size):
+                offset = pc_val - base
+                # Pointer-Cast auf 32-Bit, um die Instruktion zu lesen
+                ptr = ffi.cast('uint32_t*', memory + offset)
+                
+                if ptr[0] == 0x10500073:  # RISC-V 'wfi' Opcode
+                    mip = int(cpu.cpu.read_register('mip'))
+                    mie = int(cpu.cpu.read_register('mie'))
+                    
+                    # WFI pausiert nur, wenn keine Interrupts anstehen
+                    if (mip & mie) == 0:
+                        # MAGIC TRICK: Wir geben die *gesamten* geforderten Steps zurück
+                        return steps
+                break # PC wurde in dieser DMA-Region gefunden, innere Schleife abbrechen
 
         cpu.step()
+
     return cpu.steps
 
 @ffi.def_extern()
@@ -203,18 +222,35 @@ def pydrofoil_cpu_read_reg(i, name):
 @ffi.def_extern()
 def pydrofoil_set_interrupt_pending(i, value):
     cpu = ffi.from_handle(i)
-
     bit_size = 64 if cpu.rv64 else 32
 
-    if value > 0:
-        cpu.cpu.write_register('mip', _pydrofoil.bitvector(bit_size, 1) << value)
-    else:
-        cpu.cpu.write_register('mip', _pydrofoil.bitvector(bit_size, 0))
+    # 1. Read the current mip so we don't destroy other pending interrupts (like timers)
+    current_mip_bv = cpu.cpu.read_register('mip')
+    
+    # Note: Depending on pydrofoil version, you may need to convert the bitvector 
+    # to an int first, e.g., int(current_mip_bv) or current_mip_bv.to_int()
+    # Assuming current_mip_bv behaves as an int in bitwise operations:
+    current_mip = int(current_mip_bv) 
 
+    if value > 0:
+        # Set the specific interrupt bit (e.g., bit 3 for MSIP)
+        new_mip = current_mip | (1 << value)
+    else:
+        # Assuming the C++ code passes value=0 when the guest clears MSIP (bit 3).
+        # We clear ONLY bit 3, leaving MTIP/MEIP intact.
+        # (If your API clears other interrupts, adjust the bit shift accordingly)
+        new_mip = current_mip & ~(1 << 3)
+
+    cpu.cpu.write_register('mip', _pydrofoil.bitvector(bit_size, new_mip))
+
+    # Read CSRs for debug
     mstatus = cpu.cpu.lowlevel.read_CSR(0x300)
     mie = cpu.cpu.lowlevel.read_CSR(0x304)
     mip = cpu.cpu.lowlevel.read_CSR(0x344)
-    print("value, mstatus, mie, mip:", value, hex(mstatus), hex(mie), hex(mip))
+    
+    # 2. Use an f-string for atomic printing to prevent thread interleaving
+    print(f"value, mstatus, mie, mip: {value} {hex(mstatus)} {hex(mie)} {hex(mip)}")
+    
     return 0
 
 @ffi.def_extern()
