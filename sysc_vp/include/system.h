@@ -9,7 +9,7 @@
 #include <filesystem>
 
 #ifndef NRCPU
-#define NRCPU 4 // Standardwert
+    #define NRCPU 8 // Standardwert
 #endif
 
 namespace virtual_platform {
@@ -25,7 +25,7 @@ enum : mwr::u64 {
 
     MULTICORE_SIMDEV_LO = 0x10000000,
     MULTICORE_SIMDEV_HI = MULTICORE_SIMDEV_LO + 0x1000 - 1,
-    
+
     SIMDEV_LO = 0x10008000,
     SIMDEV_HI = SIMDEV_LO + 0x1000 - 1,
 
@@ -36,67 +36,67 @@ enum : mwr::u64 {
     PLIC_HI = PLIC_LO + 0x224FFF - 1,
 
     CLINT_LO = 0x80400000,
-    CLINT_HI = CLINT_LO + 0x10000 - 1 
+    CLINT_HI = CLINT_LO + 0x10000 - 1
 };
 
 enum : mwr::u64 { IRQ_UART0 = 5 };
 
 class system : public vcml::system {
-public:
-  using u16 = vcml::u16;
-  using u32 = vcml::u32;
-  using u64 = vcml::u64;
-  using range = vcml::range;
+    public:
+    using u16 = vcml::u16;
+    using u32 = vcml::u32;
+    using u64 = vcml::u64;
+    using range = vcml::range;
 
-  vcml::property<range> ram;
-  vcml::property<range> bram;
-  vcml::property<range> addr_uart0;
-  vcml::property<range> addr_plic;
-  vcml::property<vcml::range> addr_simdev;
-  vcml::property<vcml::range> addr_multicore_simdev;
-  vcml::property<int>   irq_uart0;
-  vcml::property<range> addr_clint;
+    vcml::property<range> ram;
+    vcml::property<range> bram;
+    vcml::property<range> addr_uart0;
+    vcml::property<range> addr_plic;
+    vcml::property<vcml::range> addr_simdev;
+    vcml::property<vcml::range> addr_multicore_simdev;
+    vcml::property<int> irq_uart0;
+    vcml::property<range> addr_clint;
 
-  system(const sc_core::sc_module_name& nm);
-  virtual ~system();
-  VCML_KIND(sysc_vp::system);
+    system(const sc_core::sc_module_name& nm);
+    virtual ~system();
+    VCML_KIND(sysc_vp::system);
 
-  virtual int run() override;
+    virtual int run() override;
 
-private:
-  // --- Primitiver Ansatz: Feste Member-Variablen ---
-  core::PydrofoilCore m_core0;
+    private:
+    // --- Primitiver Ansatz: Feste Member-Variablen ---
+    core::PydrofoilCore m_core0;
 #if NRCPU > 1
-  core::PydrofoilCore m_core1;
+    core::PydrofoilCore m_core1;
 #endif
 #if NRCPU > 2
-  core::PydrofoilCore m_core2;
-  core::PydrofoilCore m_core3;
+    core::PydrofoilCore m_core2;
+    core::PydrofoilCore m_core3;
 #endif
 #if NRCPU > 4
-  core::PydrofoilCore m_core4;
-  core::PydrofoilCore m_core5;
-  core::PydrofoilCore m_core6;
-  core::PydrofoilCore m_core7;
+    core::PydrofoilCore m_core4;
+    core::PydrofoilCore m_core5;
+    core::PydrofoilCore m_core6;
+    core::PydrofoilCore m_core7;
 #endif
 
-  vcml::generic::bus     m_bus;
-  vcml::generic::memory  m_ram;
-  vcml::generic::memory  m_bram;
-  vcml::meta::multicore_simdev m_multicore_simdev;
+    vcml::generic::bus m_bus;
+    vcml::generic::memory m_ram;
+    vcml::generic::memory m_bram;
+    vcml::meta::multicore_simdev m_multicore_simdev;
 
-  vcml::meta::throttle m_throttle;
-  vcml::meta::loader   m_loader;
-  vcml::meta::simdev m_simdev;
+    vcml::meta::throttle m_throttle;
+    vcml::meta::loader m_loader;
+    vcml::meta::simdev m_simdev;
 
-  vcml::generic::clock m_clock_cpu;
-  vcml::generic::reset m_reset;
+    vcml::generic::clock m_clock_cpu;
+    vcml::generic::reset m_reset;
 
-  vcml::serial::nrf51 m_uart0;
-  vcml::riscv::plic m_plic;
-  vcml::riscv::clint m_clint;
+    vcml::serial::nrf51 m_uart0;
+    vcml::riscv::plic m_plic;
+    vcml::riscv::clint m_clint;
 
-  vcml::serial::terminal m_term;
+    vcml::serial::terminal m_term;
 };
 
 } // namespace virtual_platform

@@ -44,6 +44,20 @@ class C:
 
         def pyread(addr, width):
             addr = int(addr)
+            
+            # --- DEBUG CHECK: Abfangen von Lesezugriffen auf Adresse 0 ---
+            if 0 <= addr <= 1000:
+                pc_val = int(self.cpu.read_register('pc'))
+                hart_id = int(self.cpu.read_register('mhartid'))
+                mtvec = int(self.cpu.read_register('mtvec'))
+                mepc = int(self.cpu.read_register('mepc'))
+                mcause = int(self.cpu.read_register('mcause'))
+                print(f"[FATAL] Hart {hart_id} versucht von Adresse 0x0 zu lesen! Aktueller PC: {hex(pc_val)}")
+                print(f"        mtvec  (Trap Vector) : {hex(mtvec)}")
+                print(f"        mepc   (Vorheriger PC) : {hex(mepc)}")
+                print(f"        mcause (Warum?)      : {hex(mcause)}")
+            # -------------------------------------------------------------
+
             ptr_type, bitv_size = resolve_width(width)
 
             # Check DMA regions first
@@ -60,6 +74,19 @@ class C:
             addr = int(addr)
             value = int(value)
             ptr_type, bitv_size = resolve_width(width)
+
+            # --- DEBUG CHECK: Abfangen von illegalen Schreibzugriffen ---
+            if 0 <= addr <= 1000:
+                pc_val = int(self.cpu.read_register('pc'))
+                hart_id = int(self.cpu.read_register('mhartid'))
+                mtvec = int(self.cpu.read_register('mtvec'))
+                mepc = int(self.cpu.read_register('mepc'))
+                mcause = int(self.cpu.read_register('mcause'))
+                
+                print(f"[FATAL WRITE] Hart {hart_id} versucht Wert {hex(value)} auf Adresse {hex(addr)} zu schreiben!")
+                print(f"              Aktueller PC: {hex(pc_val)}")
+                print(f"              mtvec: {hex(mtvec)}, mepc: {hex(mepc)}, mcause: {hex(mcause)}")
+            # -------------------------------------------------------------
 
             # Check DMA regions first
             ptr = dma_lookup(addr, ptr_type)
@@ -191,6 +218,7 @@ def pydrofoil_cpu_simulate(i, steps):
                 ptr = ffi.cast('uint32_t*', memory + offset)
                 
                 if ptr[0] == 0x10500073:  # RISC-V 'wfi' Opcode
+                    # print(f"[DEBUG Python] WFI detected at PC: {hex(pc_val)}\n")
                     mip = int(cpu.cpu.read_register('mip'))
                     mie = int(cpu.cpu.read_register('mie'))
                     

@@ -168,6 +168,9 @@ void PydrofoilCore::notify_pending_irq(bool set)
     done.get();           // Wait for the result
     std::cout << "interrupt task for core " << m_hart_id << " with irq_num: " << irq_num << " and mip_val: " << mip_val
               << " completed" << std::endl;
+    if(irq_num == 2 && mip_val == 0 && m_hart_id == 0) {
+        std::cout << "Deadlock detected" << std::endl;
+    }
 }
 
 void PydrofoilCore::interrupt(size_t irq, bool set)
@@ -275,6 +278,7 @@ void PydrofoilCore::simulate(size_t cycles)
 {
     if(is_irq_pending.has_value()) {
         notify_pending_irq(is_irq_pending.value());
+        std::cout << "Hart " << m_hart_id << " Interrupt handling done" << std::endl;
         is_irq_pending.reset();
     }
 
@@ -289,6 +293,7 @@ void PydrofoilCore::simulate(size_t cycles)
     }
 
     task_cv.notify_one(); // notify the waiting thread
+    std::cout << "Hart " << m_hart_id << " sim started" << std::endl;
 
     while(done.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
         MemAccess memtask;
@@ -297,15 +302,9 @@ void PydrofoilCore::simulate(size_t cycles)
             std::unique_lock<std::mutex> lock(memtask_mutex);
 
             // wait_for blockiert maximal für 3 echte Host-Sekunden
-            bool predicate_met = memtask_cv.wait_for(lock, std::chrono::seconds(3), [&] {
+            memtask_cv.wait(lock, [&] {
                 return !memtask_queue.empty() || (done.wait_for(std::chrono::seconds(0)) == std::future_status::ready);
             });
-
-            // Wenn das Prädikat nicht erfüllt wurde, war es ein Timeout durch die 3 Sekunden
-            if(!predicate_met) {
-                std::cout << "[MONITOR] Hart " << m_hart_id << " | I Am awake" << std::endl;
-                continue; // Springt zurück zur while-Bedingung und wartet sofort wieder
-            }
 
             if(!memtask_queue.empty()) {
                 memtask = std::move(memtask_queue.front());
@@ -356,6 +355,7 @@ void PydrofoilCore::simulate(size_t cycles)
     n_cycles += current_steps;
     check_for_dmi_regions();
     step = false;
+    std::cout << " Hart " << m_hart_id << " | Sim task finished" << std::endl;
 }
 
 // void PydrofoilCore::simulate(size_t cycles)
@@ -560,6 +560,8 @@ void PydrofoilCore::python_worker_loop()
             // static_cast<int>(task.py_funct) << std::endl;
             it->second(task);
         }
+        std::cout << "DEBUG: Task for hart " << m_hart_id << " with function " << static_cast<int>(task.py_funct)
+                  << " completed" << std::endl;
     }
 }
 

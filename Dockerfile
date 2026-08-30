@@ -15,7 +15,8 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     libffi-dev \
     libgmp-dev \
-    zlib1g-dev
+    zlib1g-dev \
+    gdb
     
 # Copy everything to the working directory
 WORKDIR /vcml-pydrofoil
