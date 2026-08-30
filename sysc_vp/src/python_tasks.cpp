@@ -76,17 +76,17 @@ auto create_handlers(core::PydrofoilCore& pycore) -> std::unordered_map<Funct, s
              Profiler t("Simulate");
 #endif
              auto cycles = std::get<size_t>(task.arg);
-             PYCORE_LOG(pycore, "Hart " << pycore.m_hart_id << " | PYTHON WORKER STARTED" << std::endl);
+             //  PYCORE_LOG(pycore, "Hart " << pycore.m_hart_id << " | PYTHON WORKER STARTED" << std::endl);
              auto n_steps = pycore.m_pydrofoil_cpu_simulate(pycore.cpu, cycles);
              // pycore.n_cycles = core.m_pydrofoil_cpu_cycles(pycore.cpu);
              task.result.set_value(n_steps);
-             PYCORE_LOG(pycore, "Hart " << pycore.m_hart_id << " | PYTHON WORKER FNISHED" << std::endl);
+             //  PYCORE_LOG(pycore, "Hart " << pycore.m_hart_id << " | PYTHON WORKER FNISHED" << std::endl);
              {
                  std::lock_guard<std::mutex> lock(pycore.memtask_mutex);
                  pycore.sim_done_flag = true;
              }
              pycore.memtask_cv.notify_one();
-             PYCORE_LOG(pycore, "Hart " << pycore.m_hart_id << " | PYTHON WORKER RETURNING" << std::endl);
+             //  PYCORE_LOG(pycore, "Hart " << pycore.m_hart_id << " | PYTHON WORKER RETURNING" << std::endl);
          }},
         {Funct::WriteReg,
          [&pycore](PythonTask& task) {

@@ -19,9 +19,9 @@ int write_mem(void* cpu, uint64_t address, int size, uint64_t value, void* paylo
 {
     auto core = reinterpret_cast<core::PydrofoilCore*>(payload);
 
-    std::cout << "[REQUEST] Hart " << core->m_hart_id << " | WRITE to addr: 0x" << std::hex << address
-              << " | size: " << std::dec << size << " bytes"
-              << " | value: 0x" << std::hex << value << std::dec << std::endl;
+    // std::cout << "[REQUEST] Hart " << core->m_hart_id << " | WRITE to addr: 0x" << std::hex << address
+    //           << " | size: " << std::dec << size << " bytes"
+    //           << " | value: 0x" << std::hex << value << std::dec << std::endl;
 
     core::PydrofoilCore::MemAccess memtask;
 
@@ -40,8 +40,10 @@ int write_mem(void* cpu, uint64_t address, int size, uint64_t value, void* paylo
 
     bool success = res.get();
 
-    std::cout << "[SUCCEEDED] Hart " << core->m_hart_id << " | WRITE to addr: 0x" << std::hex << address << std::dec
-              << " | status: " << (success ? "OK" : "FAILED") << std::endl;
+    if(!success) {
+        std::cout << "[SUCCEEDED] Hart " << core->m_hart_id << " | READ from addr: 0x" << std::hex << address
+                  << std::dec << " | status: " << (success ? "OK" : "FAILED") << std::endl;
+    }
 
     return success ? 0 : 1;
 }
@@ -51,8 +53,8 @@ int read_mem(void* cpu, uint64_t address, int size, void* destination, void* pay
 {
     auto core = reinterpret_cast<core::PydrofoilCore*>(payload);
 
-    std::cout << "[REQUEST] Hart " << core->m_hart_id << " | READ from addr: 0x" << std::hex << address
-              << " | size: " << std::dec << size << " bytes" << std::endl;
+    // std::cout << "[REQUEST] Hart " << core->m_hart_id << " | READ from addr: 0x" << std::hex << address
+    //           << " | size: " << std::dec << size << " bytes" << std::endl;
 
     core::PydrofoilCore::MemAccess memtask;
 
@@ -71,8 +73,10 @@ int read_mem(void* cpu, uint64_t address, int size, void* destination, void* pay
 
     bool success = res.get();
 
-    std::cout << "[SUCCEEDED] Hart " << core->m_hart_id << " | READ from addr: 0x" << std::hex << address << std::dec
-              << " | status: " << (success ? "OK" : "FAILED") << std::endl;
+    if(!success) {
+        std::cout << "[SUCCEEDED] Hart " << core->m_hart_id << " | READ from addr: 0x" << std::hex << address
+                  << std::dec << " | status: " << (success ? "OK" : "FAILED") << std::endl;
+    }
 
     return success ? 0 : 1;
 }
