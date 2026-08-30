@@ -292,6 +292,7 @@ void PydrofoilCore::simulate(size_t cycles)
         is_irq_pending.reset();
     }
 
+    sim_done_flag = false;
     backend::PythonTask task;
     task.py_funct = backend::Funct::Simulate;
     task.arg = step ? 1 : cycles;
@@ -303,22 +304,23 @@ void PydrofoilCore::simulate(size_t cycles)
     }
 
     task_cv.notify_one(); // notify the waiting thread
-    CORE_LOG("Hart " << m_hart_id << " sim started");
-    while(done.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
+    CORE_LOG("Hart " << m_hart_id << "start: PydrofoilCore::simulate");
+    while(1) {
         MemAccess memtask;
 
         {
             std::unique_lock<std::mutex> lock(memtask_mutex);
 
             // wait_for blockiert maximal für 3 echte Host-Sekunden
-            memtask_cv.wait(lock, [&] {
-                return !memtask_queue.empty() || (done.wait_for(std::chrono::seconds(0)) == std::future_status::ready);
-            });
-
+            memtask_cv.wait(lock, [&] { return !memtask_queue.empty() || sim_done_flag; });
             if(!memtask_queue.empty()) {
                 memtask = std::move(memtask_queue.front());
                 memtask_queue.pop();
+            } else if(sim_done_flag) {
+                CORE_LOG("Hart " << m_hart_id << " | Breaking out of memtask loop because sim task is ready");
+                break;
             } else {
+                CORE_LOG("Hart " << m_hart_id << " | DANGER ELSE CONDITION");
                 continue;
             }
         }
@@ -364,7 +366,7 @@ void PydrofoilCore::simulate(size_t cycles)
     n_cycles += current_steps;
     check_for_dmi_regions();
     step = false;
-    CORE_LOG("Hart " << m_hart_id << " | Sim task finished");
+    CORE_LOG("Hart " << m_hart_id << " | end: PydrofoilCore::simulate");
 }
 
 // void PydrofoilCore::simulate(size_t cycles)

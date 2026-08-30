@@ -10,6 +10,18 @@
 #include "python_tasks.h"
 #include "core.h"
 
+#define PYCORE_LOG(core_ref, stream_args)                       \
+    do {                                                        \
+        std::lock_guard<std::mutex> lock(core_ref.m_log_mutex); \
+        if(core_ref.m_log_file.is_open()) {                     \
+            core_ref.m_log_file << stream_args << std::endl;    \
+            core_ref.m_log_file.flush();                        \
+        } else {                                                \
+            std::cout << stream_args << std::endl;              \
+        }                                                       \
+    } while(0)
+// ---------------------------------------
+
 namespace backend {
 
 auto create_handlers(core::PydrofoilCore& pycore) -> std::unordered_map<Funct, std::function<void(PythonTask&)>>
@@ -64,12 +76,17 @@ auto create_handlers(core::PydrofoilCore& pycore) -> std::unordered_map<Funct, s
              Profiler t("Simulate");
 #endif
              auto cycles = std::get<size_t>(task.arg);
+             PYCORE_LOG(pycore, "Hart " << pycore.m_hart_id << " | PYTHON WORKER STARTED" << std::endl);
              auto n_steps = pycore.m_pydrofoil_cpu_simulate(pycore.cpu, cycles);
              // pycore.n_cycles = core.m_pydrofoil_cpu_cycles(pycore.cpu);
              task.result.set_value(n_steps);
-             CORE_LOG("Hart " << pycore.m_hart_id << " | Sim task notifiying now" << std::endl);
+             PYCORE_LOG(pycore, "Hart " << pycore.m_hart_id << " | PYTHON WORKER FNISHED" << std::endl);
+             {
+                 std::lock_guard<std::mutex> lock(pycore.memtask_mutex);
+                 pycore.sim_done_flag = true;
+             }
              pycore.memtask_cv.notify_one();
-             CORE_LOG("Hart " << pycore.m_hart_id << " | has just notified after sim task" << std::endl);
+             PYCORE_LOG(pycore, "Hart " << pycore.m_hart_id << " | PYTHON WORKER RETURNING" << std::endl);
          }},
         {Funct::WriteReg,
          [&pycore](PythonTask& task) {

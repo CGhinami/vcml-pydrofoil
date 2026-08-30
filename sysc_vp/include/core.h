@@ -127,11 +127,12 @@ class PydrofoilCore : public vcml::processor {
     virtual bool remove_breakpoint(vcml::u64 addr) override;
     void sc_sync_catch_ex(std::function<void(void)> job);
     uint64_t m_hart_id;
+    std::ofstream m_log_file;
+    std::mutex m_log_mutex;
+    bool sim_done_flag = false; // <-- NEU
 
     private:
     bool step;
-    std::ofstream m_log_file;
-    std::mutex m_log_mutex;
 
     std::optional<bool> is_irq_pending;
     size_t irq_num;
