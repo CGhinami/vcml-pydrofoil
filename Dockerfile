@@ -49,6 +49,13 @@ RUN chmod a+x launch.sh
 # RUN inherits host's umask, on alma this results in "no permission" later on (podman)
 RUN chmod -R a+rX /vcml-pydrofoil /opt/pypy
 
+
+# RUN inherits host's umask, on alma this results in "no permission" later on (podman)
+RUN chmod -R a+rX /vcml-pydrofoil /opt/pypy
+
+# --- NEU: Logs-Ordner vorbereiten und Schreibrechte setzen ---
+RUN mkdir -p /vcml-pydrofoil/logs && chmod 777 /vcml-pydrofoil/logs
+
 # We're going to be using the absolute path, since the path starts with the "/"
 ENTRYPOINT ["/vcml-pydrofoil/launch.sh"]
 CMD ["/vcml-pydrofoil/benchmark/riscv64_ex.cfg"]

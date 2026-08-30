@@ -17,6 +17,17 @@
 #include <unordered_map>
 #include "arch.h"
 
+#define CORE_LOG(stream_args)                          \
+    do {                                               \
+        std::lock_guard<std::mutex> lock(m_log_mutex); \
+        if(m_log_file.is_open()) {                     \
+            m_log_file << stream_args << std::endl;    \
+            m_log_file.flush();                        \
+        } else {                                       \
+            std::cout << stream_args << std::endl;     \
+        }                                              \
+    } while(0)
+
 // FOrward declaration
 namespace backend {
 struct PythonTask;
@@ -26,45 +37,45 @@ namespace core {
 
 enum : size_t {
     MEIP = 0, // irq for machine-level external interrupts
-    SEIP = 1,  // irq for supervisor-level external interrupts
+    SEIP = 1, // irq for supervisor-level external interrupts
     MSIP = 2, // NEW: irq for machine-level software interrupts (IPIs for SMP!)
     MTIP = 3
 };
 
 enum : size_t {
     MEIP_BIT = 11, // interrupt-pending bit for machine-level external interrupts
-    SEIP_BIT = 9,   // interrupt-pending bit for supervisor-level external interrupts
+    SEIP_BIT = 9,  // interrupt-pending bit for supervisor-level external interrupts
     MSIP_BIT = 3,  // NEW: RISC-V standard bit for Machine Software Interrupts
     MTIP_BIT = 7   // NEW: RISC-V standard bit for Machine Timer Interrupts
 };
 
-class PydrofoilCore : public vcml::processor
-{
-public:
+class PydrofoilCore : public vcml::processor {
+    public:
     // --- ADDED FOR DLOPEN ---
-    void *m_pydrofoil_handle; // Stores the open library
+    void* m_pydrofoil_handle; // Stores the open library
 
     // Define the shape of the functions
 
     // Create the actual function pointer
-    int (*m_pydrofoil_set_hartid)(void *, uint64_t);
-    void *(*m_pydrofoil_allocate_cpu)(const char *, const char *);
-    int (*m_pydrofoil_cpu_set_ram_read_write_callback)(void *, int (*)(void *, uint64_t, int, void *, void *), int (*)(void *, uint64_t, int, uint64_t, void *), void *);
-    uint64_t (*m_pydrofoil_cpu_cycles)(void *);
-    int (*m_pydrofoil_cpu_set_breakpoint)(void *, uint64_t);
-    int (*m_pydrofoil_cpu_remove_breakpoint)(void *, uint64_t);
-    int (*m_pydrofoil_cpu_simulate)(void *, size_t);
-    int (*m_pydrofoil_cpu_write_reg)(void *, char const *, uint64_t);
-    uint64_t (*m_pydrofoil_cpu_read_reg)(void *, char const *);
-    int (*m_pydrofoil_free_cpu)(void *);
-    int (*m_pydrofoil_cpu_set_verbosity)(void *, int);
-    int (*m_pydrofoil_cpu_set_dma_region)(void *, uint64_t, uint64_t, uint8_t *);
-    int (*m_pydrofoil_set_interrupt_pending)(void *, uint32_t);
+    int (*m_pydrofoil_set_hartid)(void*, uint64_t);
+    void* (*m_pydrofoil_allocate_cpu)(const char*, const char*);
+    int (*m_pydrofoil_cpu_set_ram_read_write_callback)(void*, int (*)(void*, uint64_t, int, void*, void*),
+                                                       int (*)(void*, uint64_t, int, uint64_t, void*), void*);
+    uint64_t (*m_pydrofoil_cpu_cycles)(void*);
+    int (*m_pydrofoil_cpu_set_breakpoint)(void*, uint64_t);
+    int (*m_pydrofoil_cpu_remove_breakpoint)(void*, uint64_t);
+    int (*m_pydrofoil_cpu_simulate)(void*, size_t);
+    int (*m_pydrofoil_cpu_write_reg)(void*, char const*, uint64_t);
+    uint64_t (*m_pydrofoil_cpu_read_reg)(void*, char const*);
+    int (*m_pydrofoil_free_cpu)(void*);
+    int (*m_pydrofoil_cpu_set_verbosity)(void*, int);
+    int (*m_pydrofoil_cpu_set_dma_region)(void*, uint64_t, uint64_t, uint8_t*);
+    int (*m_pydrofoil_set_interrupt_pending)(void*, uint32_t);
     vcml::property<std::string> elf;
     vcml::property<std::string> arch_name;
     vcml::property<bool> verbosity;
 
-    PydrofoilCore(const sc_core::sc_module_name &name, uint64_t hart_id = 0);
+    PydrofoilCore(const sc_core::sc_module_name& name, uint64_t hart_id = 0);
     virtual ~PydrofoilCore();
 
     void* cpu;
@@ -110,14 +121,17 @@ public:
     virtual void interrupt(size_t irq, bool set) override;
     void reset() override;
 
-    virtual bool write_reg_dbg(size_t reg, const void *buf, size_t len) override;
-    virtual bool read_reg_dbg(size_t regno, void *buf, size_t len) override;
+    virtual bool write_reg_dbg(size_t reg, const void* buf, size_t len) override;
+    virtual bool read_reg_dbg(size_t regno, void* buf, size_t len) override;
     virtual bool insert_breakpoint(vcml::u64 addr) override;
     virtual bool remove_breakpoint(vcml::u64 addr) override;
     void sc_sync_catch_ex(std::function<void(void)> job);
     uint64_t m_hart_id;
-private:
+
+    private:
     bool step;
+    std::ofstream m_log_file;
+    std::mutex m_log_mutex;
 
     std::optional<bool> is_irq_pending;
     size_t irq_num;
@@ -135,7 +149,6 @@ private:
     void python_worker_loop();
 
     void handle_breakpoint_hit();
-
 
     protected:
     virtual void end_of_elaboration() override;

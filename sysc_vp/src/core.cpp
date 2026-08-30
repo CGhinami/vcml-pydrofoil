@@ -29,6 +29,13 @@ PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name, uint64_t hart_
     core_arch(arch_name.c_str(), arch_name == "rv64" ? 64 : 32, architecture::regdb_riscv, 33),
     m_hart_id(hart_id)
 {
+    std::filesystem::create_directories("logs"); // Sicherstellen, dass der Ordner existiert
+    std::string log_path = "logs/core" + std::to_string(hart_id) + "_debug.txt";
+    m_log_file.open(log_path, std::ios::out | std::ios::trunc);
+    if(m_log_file.is_open()) {
+        mwr::log_info("Opened debug log file for Hart %lu at %s", hart_id, log_path.c_str());
+    }
+
     // --- ISOLATED LIBRARY SETUP ---
     std::string base_lib = "./libpydrofoilcapi_cffi.so";
     std::string isolated_dir = "/tmp/isolated_libs";
@@ -132,6 +139,9 @@ PydrofoilCore::~PydrofoilCore()
         task_cv.notify_one();
         done.get();
     }
+    if(m_log_file.is_open()) {
+        m_log_file.close();
+    }
 
     python_worker_thread.join();
     // --- ADDED FOR DLOPEN ---
@@ -157,8 +167,8 @@ void PydrofoilCore::notify_pending_irq(bool set)
     task.py_funct = backend::Funct::SetMIP;
     task.arg = mip_val;
     std::future<uint64_t> done = task.result.get_future();
-    std::cout << "interrupt task for core " << m_hart_id << " with irq_num: " << irq_num << " and mip_val: " << mip_val
-              << " pushed to task queue" << std::endl;
+    CORE_LOG("interrupt task for core " << m_hart_id << " with irq_num: " << irq_num << " and mip_val: " << mip_val
+                                        << " pushed to task queue");
 
     {
         std::lock_guard lock(task_mutex);
@@ -166,10 +176,10 @@ void PydrofoilCore::notify_pending_irq(bool set)
     }
     task_cv.notify_one(); // notify the waiting thread
     done.get();           // Wait for the result
-    std::cout << "interrupt task for core " << m_hart_id << " with irq_num: " << irq_num << " and mip_val: " << mip_val
-              << " completed" << std::endl;
+    CORE_LOG("interrupt task for core " << m_hart_id << " with irq_num: " << irq_num << " and mip_val: " << mip_val
+                                        << " completed");
     if(irq_num == 2 && mip_val == 0 && m_hart_id == 0) {
-        std::cout << "Deadlock detected" << std::endl;
+        CORE_LOG("Deadlock detected");
     }
 }
 
@@ -264,9 +274,9 @@ void PydrofoilCore::check_for_dmi_regions()
 void PydrofoilCore::sc_sync_catch_ex(std::function<void(void)> job)
 {
     try {
-        std::cout << "[DEBUG] Hart " << m_hart_id << " | Entering sc_sync_catch_ex" << std::endl;
+        CORE_LOG("[DEBUG] Hart " << m_hart_id << " | Entering sc_sync_catch_ex");
         vcml::sc_sync(std::move(job));
-        std::cout << "[DEBUG] Hart " << m_hart_id << " | sc_sync_catch_ex executed successfully" << std::endl;
+        CORE_LOG("[DEBUG] Hart " << m_hart_id << " | sc_sync_catch_ex executed successfully");
     } catch(...) {
         // Catch all exceptions to prevent SystemC from terminating the simulation
         mwr::log_error("Exception caught in sc_sync_catch_ex");
@@ -278,7 +288,7 @@ void PydrofoilCore::simulate(size_t cycles)
 {
     if(is_irq_pending.has_value()) {
         notify_pending_irq(is_irq_pending.value());
-        std::cout << "Hart " << m_hart_id << " Interrupt handling done" << std::endl;
+        CORE_LOG("Hart " << m_hart_id << " Interrupt handling done");
         is_irq_pending.reset();
     }
 
@@ -293,8 +303,7 @@ void PydrofoilCore::simulate(size_t cycles)
     }
 
     task_cv.notify_one(); // notify the waiting thread
-    std::cout << "Hart " << m_hart_id << " sim started" << std::endl;
-
+    CORE_LOG("Hart " << m_hart_id << " sim started");
     while(done.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
         MemAccess memtask;
 
@@ -355,7 +364,7 @@ void PydrofoilCore::simulate(size_t cycles)
     n_cycles += current_steps;
     check_for_dmi_regions();
     step = false;
-    std::cout << " Hart " << m_hart_id << " | Sim task finished" << std::endl;
+    CORE_LOG("Hart " << m_hart_id << " | Sim task finished");
 }
 
 // void PydrofoilCore::simulate(size_t cycles)
@@ -560,8 +569,8 @@ void PydrofoilCore::python_worker_loop()
             // static_cast<int>(task.py_funct) << std::endl;
             it->second(task);
         }
-        std::cout << "DEBUG: Task for hart " << m_hart_id << " with function " << static_cast<int>(task.py_funct)
-                  << " completed" << std::endl;
+        CORE_LOG("Python worker: Task for hart " << m_hart_id << " with function " << static_cast<int>(task.py_funct)
+                                                 << " completed");
     }
 }
 

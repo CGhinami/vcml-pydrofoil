@@ -58,6 +58,7 @@ if [[ -t 0 ]]; then
     INTERACTIVE_FLAGS="-it"
 fi
 
+mkdir -p "$SCRIPT_DIR/logs"
 # Run the container
 if [[ -n "$CFG_FILE" ]]; then
     CFG_REL_PATH="$(realpath --relative-to="$SCRIPT_DIR" "$(realpath "$CFG_FILE")")"
@@ -67,6 +68,7 @@ if [[ -n "$CFG_FILE" ]]; then
         --rm \
         $INTERACTIVE_FLAGS \
         -v "$SCRIPT_DIR:/configs:$MOUNT_RO_OPTS" \
+        -v "$SCRIPT_DIR/logs:/vcml-pydrofoil/logs:rw,z" \
         "$IMAGE_NAME" \
         $DEBUG_CMD "$CFG_REL_PATH"
 else
@@ -74,5 +76,6 @@ else
         $CONTAINER_PROGRAM_FLAGS \
         --rm \
         $INTERACTIVE_FLAGS \
+        -v "$SCRIPT_DIR/logs:/vcml-pydrofoil/logs:rw,z" \
         "$IMAGE_NAME" $DEBUG_CMD
 fi
