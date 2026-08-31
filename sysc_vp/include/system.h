@@ -9,7 +9,7 @@
 #include <filesystem>
 
 #ifndef NRCPU
-    #define NRCPU 4 // Standardwert
+    #define NRCPU 2 // Standardwert
 #endif
 
 namespace virtual_platform {

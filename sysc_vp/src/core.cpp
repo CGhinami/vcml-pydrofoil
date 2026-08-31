@@ -167,18 +167,15 @@ void PydrofoilCore::notify_pending_irq(bool set)
     task.py_funct = backend::Funct::SetMIP;
     task.arg = mip_val;
     std::future<uint64_t> done = task.result.get_future();
-    // CORE_LOG("interrupt task for core " << m_hart_id << " with irq_num: " << irq_num << " and mip_val: " << mip_val
-    // << " pushed to task queue");
+    CORE_LOG("interrupt task for core " << m_hart_id << " with irq_num: " << irq_num << " and mip_val: " << mip_val<< " pushed to task queue");
 
     {
         std::lock_guard lock(task_mutex);
         task_queue.push(std::move(task));
     }
-    task_cv.notify_one(); // notify the waiting thread
-    done.get();           // Wait for the result
-                          // CORE_LOG("interrupt task for core " << m_hart_id << " with irq_num: " <<
-    // irq_num << " and mip_val: " << mip_va                                    << " completed"); if(irq_num == 2 &&
-    // mip_val == 0 && m_hart_id == 0) { CORE_LOG("Deadlock detected");}
+    task_cv.notify_one(); 
+    done.get();           
+    CORE_LOG("interrupt task for core " << m_hart_id << " with irq_num: " <<irq_num << " and mip_val: " << mip_val << " completed"); if(irq_num == 2 && mip_val == 0 && m_hart_id == 0) { CORE_LOG("Deadlock detected");}
 }
 
 void PydrofoilCore::interrupt(size_t irq, bool set)
@@ -272,9 +269,9 @@ void PydrofoilCore::check_for_dmi_regions()
 void PydrofoilCore::sc_sync_catch_ex(std::function<void(void)> job)
 {
     try {
-        // CORE_LOG("[DEBUG] Hart " << m_hart_id << " | Entering sc_sync_catch_ex");
+        CORE_LOG("[DEBUG] Hart " << m_hart_id << " | Entering sc_sync_catch_ex");
         vcml::sc_sync(std::move(job));
-        // CORE_LOG("[DEBUG] Hart " << m_hart_id << " | sc_sync_catch_ex executed successfully");
+        CORE_LOG("[DEBUG] Hart " << m_hart_id << " | sc_sync_catch_ex executed successfully");
     } catch(...) {
         // Catch all exceptions to prevent SystemC from terminating the simulation
         mwr::log_error("Exception caught in sc_sync_catch_ex");
@@ -302,7 +299,7 @@ void PydrofoilCore::simulate(size_t cycles)
     }
 
     task_cv.notify_one(); // notify the waiting thread
-    // CORE_LOG("Hart " << m_hart_id << "start: PydrofoilCore::simulate");
+    CORE_LOG("Hart " << m_hart_id << "start: PydrofoilCore::simulate");
     while(1) {
         MemAccess memtask;
 
@@ -315,10 +312,10 @@ void PydrofoilCore::simulate(size_t cycles)
                 memtask = std::move(memtask_queue.front());
                 memtask_queue.pop();
             } else if(sim_done_flag) {
-                // CORE_LOG("Hart " << m_hart_id << " | Breaking out of memtask loop because sim task is ready");
+                CORE_LOG("Hart " << m_hart_id << " | Breaking out of memtask loop because sim task is ready");
                 break;
             } else {
-                // CORE_LOG("Hart " << m_hart_id << " | DANGER ELSE CONDITION");
+                CORE_LOG("Hart " << m_hart_id << " | DANGER ELSE CONDITION");
                 continue;
             }
         }
@@ -364,7 +361,7 @@ void PydrofoilCore::simulate(size_t cycles)
     n_cycles += current_steps;
     check_for_dmi_regions();
     step = false;
-    // CORE_LOG("Hart " << m_hart_id << " | end: PydrofoilCore::simulate");
+    CORE_LOG("Hart " << m_hart_id << " | end: PydrofoilCore::simulate");
 }
 
 // void PydrofoilCore::simulate(size_t cycles)
@@ -569,8 +566,8 @@ void PydrofoilCore::python_worker_loop()
             // static_cast<int>(task.py_funct) << std::endl;
             it->second(task);
         }
-        // CORE_LOG("Python worker: Task for hart " << m_hart_id << " with function " << static_cast<int>(task.py_funct)
-        // << " completed");
+        CORE_LOG("Python worker: Task for hart " << m_hart_id << " with function " << static_cast<int>(task.py_funct)
+        << " completed");
     }
 }
 
