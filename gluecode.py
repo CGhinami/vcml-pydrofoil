@@ -252,22 +252,19 @@ def pydrofoil_set_interrupt_pending(i, value):
     cpu = ffi.from_handle(i)
     bit_size = 64 if cpu.rv64 else 32
 
-    # 1. Read the current mip so we don't destroy other pending interrupts (like timers)
-    current_mip_bv = cpu.cpu.read_register('mip')
-    
-    # Note: Depending on pydrofoil version, you may need to convert the bitvector 
-    # to an int first, e.g., int(current_mip_bv) or current_mip_bv.to_int()
-    # Assuming current_mip_bv behaves as an int in bitwise operations:
-    current_mip = int(current_mip_bv) 
+    # value encodes the mip bit index in bits 0..7 and the assert/deassert
+    # flag in bit 8, so clearing MTIP/MEIP no longer wipes MSIP.
+    value = int(value)
+    bit = value & 0xff
+    set_bit = (value & 0x100) != 0
 
-    if value > 0:
-        # Set the specific interrupt bit (e.g., bit 3 for MSIP)
-        new_mip = current_mip | (1 << value)
+    # Read the current mip so we don't destroy other pending interrupts
+    current_mip = int(cpu.cpu.read_register('mip'))
+
+    if set_bit:
+        new_mip = current_mip | (1 << bit)
     else:
-        # Assuming the C++ code passes value=0 when the guest clears MSIP (bit 3).
-        # We clear ONLY bit 3, leaving MTIP/MEIP intact.
-        # (If your API clears other interrupts, adjust the bit shift accordingly)
-        new_mip = current_mip & ~(1 << 3)
+        new_mip = current_mip & ~(1 << bit)
 
     cpu.cpu.write_register('mip', _pydrofoil.bitvector(bit_size, new_mip))
 
@@ -276,8 +273,9 @@ def pydrofoil_set_interrupt_pending(i, value):
     mie = cpu.cpu.lowlevel.read_CSR(0x304)
     mip = cpu.cpu.lowlevel.read_CSR(0x344)
     
-    # 2. Use an f-string for atomic printing to prevent thread interleaving
-    print(f"value, mstatus, mie, mip: {value} {hex(mstatus)} {hex(mie)} {hex(mip)}")
+    # Use an f-string for atomic printing to prevent thread interleaving
+    print(f"mip bit {bit} {'set' if set_bit else 'clear'}, mstatus, mie, mip: "
+          f"{hex(mstatus)} {hex(mie)} {hex(mip)}")
     
     return 0
 
