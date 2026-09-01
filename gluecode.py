@@ -196,6 +196,36 @@ class C:
 
             # Fall back to callback
             res = self.write(self._handle, addr, width, value, payload)
+            if res != 0:
+                print("\n" + "="*60)
+                try:
+                    hart = int(self.cpu.read_register('mhartid'))
+                    pc = int(self.cpu.read_register('pc'))
+                    sp = int(self.cpu.read_register('x2'))  # <--- sp ist Register x2!
+                    
+                    print(f"[FATAL CRASH] Hart {hart} Memory Access Failed!")
+                    print(f"Ziel-Adresse : {hex(addr)}")
+                    print(f"Schreib-Wert : {hex(value)}")
+                    print(f"Aktueller PC : {hex(pc)}")
+                    print(f"Stack (x2)   : {hex(sp)}")
+                    
+                    mcause = int(self.cpu.read_register('mcause'))
+                    mepc = int(self.cpu.read_register('mepc'))
+                    mtvec = int(self.cpu.read_register('mtvec'))
+                    mip = int(self.cpu.read_register('mip'))
+                    mie = int(self.cpu.read_register('mie'))
+                    print(f"mcause       : {hex(mcause)}")
+                    print(f"mepc         : {hex(mepc)}")
+                    print(f"mtvec        : {hex(mtvec)}")
+                    print(f"mip (Pending): {hex(mip)}")
+                    print(f"mie (Enable) : {hex(mie)}")
+                except Exception as e:
+                    print(f"[DEBUG] Konnte nicht alle Register lesen. Grund: {e}")
+                print("="*60 + "\n")
+                
+                assert res == 0 # Crash auslösen
+
+
             assert res == 0
 
         self.pyread = pyread
@@ -327,8 +357,16 @@ def pydrofoil_cpu_simulate(i, steps):
             if insn == 0x10500073:  # RISC-V 'wfi' Opcode
                 mip = int(cpu.cpu.read_register('mip'))
                 mie = int(cpu.cpu.read_register('mie'))
+                
                 if (mip & mie) == 0:
+                    # Keine Interrupts -> Core schläft -> Simulation Fast-Forward!
                     return steps
+                else:
+                    # Interrupt steht an -> WFI wird übersprungen (als NOP behandelt)
+                    cpu.cpu.write_register('pc', pc_val + 4)
+                    cpu.steps += 1
+                    continue  # Gehe zum nächsten Befehl, Sail sieht das WFI nie!
+
             if _emulate_atomic(cpu, pc_val, insn):
                 continue
 

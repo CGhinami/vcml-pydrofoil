@@ -15,6 +15,58 @@
  #include <unistd.h> // <-- Add this for getpid()
  #include <filesystem>
  
+ enum : uint32_t {
+     AMO_OPCODE = 0x2f,
+     AMO_WIDTH_W = 2, // funct3 encoding for the 32 bit variants
+ 
+     FUNCT5_AMOADD = 0x00,
+     FUNCT5_AMOSWAP = 0x01,
+     FUNCT5_LR = 0x02,
+     FUNCT5_SC = 0x03,
+     FUNCT5_AMOXOR = 0x04,
+     FUNCT5_AMOOR = 0x08,
+     FUNCT5_AMOAND = 0x0c,
+     FUNCT5_AMOMIN = 0x10,
+     FUNCT5_AMOMAX = 0x14,
+     FUNCT5_AMOMINU = 0x18,
+     FUNCT5_AMOMAXU = 0x1c
+ };
+struct Reservation {
+    bool valid;
+    uint64_t addr;
+};
+
+
+// Keyed by hart id, guarded by g_amo_mutex.
+std::unordered_map<uint64_t, Reservation> g_reservations;
+
+void invalidate_reservations(uint64_t word_addr)
+{
+    for(auto& entry : g_reservations) {
+        if(entry.second.valid && entry.second.addr == word_addr)
+            entry.second.valid = false;
+    }
+}
+
+bool amo_compute(uint32_t funct5, uint32_t old_value, uint32_t operand, uint32_t& new_value)
+{
+    const int32_t s_old = static_cast<int32_t>(old_value);
+    const int32_t s_operand = static_cast<int32_t>(operand);
+
+    switch(funct5) {
+    case FUNCT5_AMOSWAP: new_value = operand; return true;
+    case FUNCT5_AMOADD: new_value = old_value + operand; return true;
+    case FUNCT5_AMOXOR: new_value = old_value ^ operand; return true;
+    case FUNCT5_AMOOR: new_value = old_value | operand; return true;
+    case FUNCT5_AMOAND: new_value = old_value & operand; return true;
+    case FUNCT5_AMOMIN: new_value = s_old <= s_operand ? old_value : operand; return true;
+    case FUNCT5_AMOMAX: new_value = s_old >= s_operand ? old_value : operand; return true;
+    case FUNCT5_AMOMINU: new_value = old_value <= operand ? old_value : operand; return true;
+    case FUNCT5_AMOMAXU: new_value = old_value >= operand ? old_value : operand; return true;
+    default: return false;
+    }
+}
+
  namespace core {
  PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name, uint64_t hart_id):
      vcml::processor(name, "riscv"),
@@ -363,7 +415,7 @@
                                 tlm::TLM_OK_RESPONSE);
                  });
              }
-         } else {
+         } else if (memtask.type == MemTask::Write) {
              if(vcml::is_thread()) {
                  success = (data.write(memtask.addr, &memtask.value, memtask.size, vcml::SBI_NONE) ==
                             tlm::TLM_OK_RESPONSE);
@@ -374,10 +426,61 @@
                                 tlm::TLM_OK_RESPONSE);
                  });
              }
+         } else if (memtask.type == MemTask::AMO) {
+            sc_sync_catch_ex([&]() {
+                std::cout << "Handling AMO for hart " << m_hart_id << " | funct5: " << memtask.funct5 << " | addr: " << std::hex
+                                 << memtask.addr << " | value: " << std::hex << memtask.value << std::endl;
+                uint32_t old_value = 0;
+                // 1. TLM Read
+                success = (data.read(memtask.addr, &old_value, 4, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE);
+                
+                if (success) {
+                    uint32_t new_value = 0;
+                    // 2. Berechnen (amo_compute muss für den Kernel verfügbar sein)
+                    if (amo_compute(memtask.funct5, old_value, memtask.value, new_value)) {
+                        // 3. TLM Write
+                        success = (data.write(memtask.addr, &new_value, 4, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE);
+                        if (success) {
+                            *(uint32_t*)memtask.dest = old_value; // Alten Wert ans Python-Skript zurückgeben
+                            invalidate_reservations(memtask.addr); // Andere Harts invalidieren
+                        }
+                    } else {
+                        success = false;
+                    }
+                }
+            });
+         } else if (memtask.type == MemTask::LR) {
+            sc_sync_catch_ex([&]() {
+                std::cout << "Handling LR for hart " << m_hart_id << " | addr: " << std::hex << memtask.addr << std::endl;
+                success = (data.read(memtask.addr, memtask.dest, 4, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE);
+                if (success) {
+                    // Hart-ID in Reservation eintragen
+                    g_reservations[this->m_hart_id] = Reservation{true, memtask.addr};
+                }   
+            });
+         } else if (memtask.type == MemTask::SC) {
+            sc_sync_catch_ex([&]() {
+                std::cout << "Handling SC for hart " << m_hart_id << " | addr: " << std::hex << memtask.addr << " | value: " << std::hex << memtask.value << std::endl;
+                auto it = g_reservations.find(this->m_hart_id);
+                const bool held = it != g_reservations.end() && it->second.valid && it->second.addr == memtask.addr;
+
+                if (held) {
+                    // Nur schreiben, wenn Reservation noch gültig!
+                    success = (data.write(memtask.addr, &memtask.value, 4, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE);
+                    if (success) {
+                        invalidate_reservations(memtask.addr);
+                        *(uint32_t*)memtask.dest = 0; // 0 = Erfolg
+                    }
+                } else {
+                    *(uint32_t*)memtask.dest = 1; // 1 = Fehler (Reservation verloren)
+                    success = true; // Der Vorgang an sich ist nicht gecrasht, er war nur nicht erfolgreich
+                }
+                // Reservation dieses Harts immer löschen
+                g_reservations[this->m_hart_id] = Reservation{false, 0};
+            });
          }
- 
          if(!success) {
-             mwr::log_info("Memory access failed with address: %lx", memtask.addr);
+             mwr::log_info("Memory access of type %d failed with address: %lx", memtask.type, memtask.addr);
              std::this_thread::sleep_for(std::chrono::seconds(1));
          }
  

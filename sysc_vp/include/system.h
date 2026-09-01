@@ -8,6 +8,8 @@
 #include "multicore_simdev.h"
 #include <filesystem>
 
+
+
 #ifndef NRCPU
     #define NRCPU 4 // Standardwert
 #endif

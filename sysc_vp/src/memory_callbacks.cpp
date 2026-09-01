@@ -83,8 +83,6 @@ int read_mem(void* cpu, uint64_t address, int size, void* destination, void* pay
     return success ? 0 : 1;
 }
 
-namespace {
-
 enum : uint32_t {
     AMO_OPCODE = 0x2f,
     AMO_WIDTH_W = 2, // funct3 encoding for the 32 bit variants
@@ -102,139 +100,48 @@ enum : uint32_t {
     FUNCT5_AMOMAXU = 0x1c
 };
 
-// Serialises every atomic of every hart against every other one. All harts call
-// into this single VP binary, so unlike a lock inside the per-hart .so copies
-// this one is actually shared.
-std::mutex g_amo_mutex;
-
-struct Reservation {
-    bool valid;
-    uint64_t addr;
-};
-
-// Keyed by hart id, guarded by g_amo_mutex.
-std::unordered_map<uint64_t, Reservation> g_reservations;
-
-void invalidate_reservations(uint64_t word_addr)
-{
-    for(auto& entry : g_reservations) {
-        if(entry.second.valid && entry.second.addr == word_addr)
-            entry.second.valid = false;
-    }
-}
-
-// RAM is handed to us as DMI, so an atomic normally needs no bus transaction at
-// all. mem_regions only ever grows and is filled during the first quanta.
-uint32_t* dmi_word_ptr(core::PydrofoilCore* core, uint64_t addr)
-{
-    for(const auto& entry : core->mem_regions) {
-        const auto& region = entry.second;
-        if(addr >= region.start_addr && addr + 4 <= region.start_addr + region.size)
-            return reinterpret_cast<uint32_t*>(region.ptr + (addr - region.start_addr));
-    }
-    return nullptr;
-}
-
-bool amo_load(core::PydrofoilCore* core, uint64_t addr, uint32_t& out)
-{
-    if(uint32_t* ptr = dmi_word_ptr(core, addr)) {
-        out = __atomic_load_n(ptr, __ATOMIC_SEQ_CST);
-        return true;
-    }
-
-    uint64_t tmp = 0;
-    if(read_mem(nullptr, addr, 4, &tmp, core) != 0)
-        return false;
-    out = static_cast<uint32_t>(tmp);
-    return true;
-}
-
-bool amo_store(core::PydrofoilCore* core, uint64_t addr, uint32_t value)
-{
-    if(uint32_t* ptr = dmi_word_ptr(core, addr)) {
-        __atomic_store_n(ptr, value, __ATOMIC_SEQ_CST);
-        return true;
-    }
-
-    return write_mem(nullptr, addr, 4, value, core) == 0;
-}
-
-bool amo_compute(uint32_t funct5, uint32_t old_value, uint32_t operand, uint32_t& new_value)
-{
-    const int32_t s_old = static_cast<int32_t>(old_value);
-    const int32_t s_operand = static_cast<int32_t>(operand);
-
-    switch(funct5) {
-    case FUNCT5_AMOSWAP: new_value = operand; return true;
-    case FUNCT5_AMOADD: new_value = old_value + operand; return true;
-    case FUNCT5_AMOXOR: new_value = old_value ^ operand; return true;
-    case FUNCT5_AMOOR: new_value = old_value | operand; return true;
-    case FUNCT5_AMOAND: new_value = old_value & operand; return true;
-    case FUNCT5_AMOMIN: new_value = s_old <= s_operand ? old_value : operand; return true;
-    case FUNCT5_AMOMAX: new_value = s_old >= s_operand ? old_value : operand; return true;
-    case FUNCT5_AMOMINU: new_value = old_value <= operand ? old_value : operand; return true;
-    case FUNCT5_AMOMAXU: new_value = old_value >= operand ? old_value : operand; return true;
-    default: return false;
-    }
-}
-
-} // namespace
-
 int atomic_mem(void* cpu, uint32_t insn, uint64_t address, uint64_t src, uint64_t* result, void* payload)
 {
     auto core = reinterpret_cast<core::PydrofoilCore*>(payload);
 
-    if((insn & 0x7f) != AMO_OPCODE)
-        return 1;
-    if(((insn >> 12) & 0x7) != AMO_WIDTH_W)
+    if((insn & 0x7f) != AMO_OPCODE || ((insn >> 12) & 0x7) != AMO_WIDTH_W)
         return 1;
 
     const uint32_t funct5 = (insn >> 27) & 0x1f;
     const uint64_t addr = address & ~uint64_t(3);
     const uint32_t operand = static_cast<uint32_t>(src);
 
-    std::lock_guard<std::mutex> guard(g_amo_mutex);
+    core::PydrofoilCore::MemAccess memtask;
+    memtask.addr = addr;
+    memtask.size = 4;
+    memtask.funct5 = funct5;
 
-    if(funct5 == FUNCT5_LR) {
-        uint32_t value = 0;
-        if(!amo_load(core, addr, value))
-            return 1;
-        g_reservations[core->m_hart_id] = Reservation{true, addr};
-        *result = value;
-        return 0;
+    // Je nach AMO-Typ den MemTask vorbereiten
+    if (funct5 == FUNCT5_LR) {
+        memtask.type = core::PydrofoilCore::MemTask::LR;
+        memtask.dest = result; // Ziel für den gelesenen Wert
+    } 
+    else if (funct5 == FUNCT5_SC) {
+        memtask.type = core::PydrofoilCore::MemTask::SC;
+        memtask.value = operand; // Was geschrieben werden soll
+        memtask.dest = result;   // Ziel für den Error-Code (0=OK, 1=Fail)
+    } 
+    else {
+        memtask.type = core::PydrofoilCore::MemTask::AMO;
+        memtask.value = operand;
+        memtask.dest = result;   // Ziel für den alten Wert
     }
 
-    if(funct5 == FUNCT5_SC) {
-        auto it = g_reservations.find(core->m_hart_id);
-        const bool held = it != g_reservations.end() && it->second.valid && it->second.addr == addr;
+    std::future<bool> res = memtask.result.get_future();
 
-        if(held) {
-            if(!amo_store(core, addr, operand))
-                return 1;
-            invalidate_reservations(addr);
-            *result = 0;
-        } else {
-            *result = 1;
-        }
-
-        // A store-conditional always ends the issuing hart's reservation, no
-        // matter whether it succeeded.
-        g_reservations[core->m_hart_id] = Reservation{false, 0};
-        return 0;
+    {
+        // Mutex für das Einreihen in die Queue (verhindert Race-Conditions mit dem SystemC Thread)
+        std::lock_guard lock(core->memtask_mutex);
+        core->memtask_queue.push(std::move(memtask));
     }
+    core->memtask_cv.notify_one();
 
-    uint32_t old_value = 0;
-    if(!amo_load(core, addr, old_value))
-        return 1;
+    bool success = res.get(); // Wartet auf SystemC-Kernel
 
-    uint32_t new_value = 0;
-    if(!amo_compute(funct5, old_value, operand, new_value))
-        return 1;
-
-    if(!amo_store(core, addr, new_value))
-        return 1;
-
-    invalidate_reservations(addr);
-    *result = old_value;
-    return 0;
+    return success ? 0 : 1;
 }
