@@ -109,18 +109,24 @@ class C:
         # print(f"[DEBUG Python] self.cpu type: {type(self.cpu)}")
 
     def reset(self):
+        # 1. Architektur bestimmen
         if self.rv64:
             cls = _pydrofoil.RISCV64
         else:
             cls = _pydrofoil.RISCV32
+            
+        # 2. CPU Instanz erstellen
         if self.callbacks:
             self.cpu = cls(self.arg, callbacks=self.callbacks)
         else:
             self.cpu = cls(self.arg)
+            
+        # 3. CPU konfigurieren
         self.steps = 0
         self.cpu._set_sail_memory_bounds(0x00000000, 0x4000000000)
         self.set_verbosity(self.verbosity)
         self.cpu._set_htif_tohost(0x900F0000)
+        
      
     def set_hartid(self, hartid):
         try:
