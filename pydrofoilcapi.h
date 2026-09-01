@@ -42,6 +42,10 @@ CFFI_DLLEXPORT int pydrofoil_set_hartid(void* cpu, uint64_t value);
 
 //
 
+CFFI_DLLEXPORT int pydrofoil_cpu_set_atomic_callback(void *cpu,
+    int (*atomic_cb)(void *, uint32_t, uint64_t, uint64_t, uint64_t *, void *),
+    void *payload);
+
 CFFI_DLLEXPORT int pydrofoil_cpu_set_ram_read_write_callback(
         void* cpu,
         pydrofoil_mem_read_cb,

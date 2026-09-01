@@ -2,9 +2,103 @@ from _pydrofoilcapi_cffi import ffi
 import _pydrofoil
 
 import sys
+
 sys.modules['__main__'] = type(sys)('__main__')
 
 all_cpu_handles = []
+
+# This file is compiled INTO libpydrofoilcapi_cffi.so. Editing it here has no
+# effect until that .so is rebuilt from this gluecode.py. Isolated hart copies
+# under /tmp/isolated_libs are overwritten from the rebuilt .so at launch.
+
+# Every hart dlmopen's its own copy of this module, so nothing declared here is
+# shared between harts. That is why LR/SC reservations and the read-modify-write
+# live in the VP instead, see atomic_mem() in sysc_vp/src/memory_callbacks.cpp.
+
+_ABI_GPR = (
+    'zero', 'ra', 'sp', 'gp', 'tp', 't0', 't1', 't2',
+    's0', 's1', 'a0', 'a1', 'a2', 'a3', 'a4', 'a5',
+    'a6', 'a7', 's2', 's3', 's4', 's5', 's6', 's7',
+    's8', 's9', 's10', 's11', 't3', 't4', 't5', 't6',
+)
+
+
+def _u32(x):
+    return int(x) & 0xffffffff
+
+
+def _gpr_names(n):
+    yield 'x%d' % n
+    yield _ABI_GPR[n]
+
+
+def _read_gpr(cpu, n):
+    if n == 0:
+        return 0
+    last = None
+    for name in _gpr_names(n):
+        try:
+            return _u32(cpu.cpu.read_register(name))
+        except Exception as e:
+            last = e
+    raise last
+
+
+def _write_gpr(cpu, n, value):
+    if n == 0:
+        return
+    value = _u32(value)
+    last = None
+    for name in _gpr_names(n):
+        try:
+            cpu.cpu.write_register(name, value)
+            return
+        except Exception as e:
+            last = e
+    raise last
+
+
+def _fetch_insn(cpu, pc_val):
+    for base, size, memory in cpu.dma_regions:
+        if base <= pc_val and (pc_val + 4) <= (base + size):
+            ptr = ffi.cast('uint32_t*', memory + (pc_val - base))
+            return int(ptr[0]) & 0xffffffff
+    if getattr(cpu, 'pyread', None) is None:
+        return None
+    return _u32(cpu.pyread(pc_val, 4))
+
+
+def _emulate_atomic(cpu, pc_val, insn):
+    """Run one A-extension insn in the VP instead of in the Sail model.
+
+    Only the register file is reachable from here, so this side decodes rd/rs1/
+    rs2 and the VP decides what the instruction means.
+    """
+    if (insn & 0x7f) != 0x2f:
+        return False
+    if cpu.atomic_cb is None:
+        return False
+
+    rd = (insn >> 7) & 0x1f
+    rs1 = (insn >> 15) & 0x1f
+    rs2 = (insn >> 20) & 0x1f
+    
+    print(f"[I] atomic insn {insn:08x} at pc {pc_val:08x}, rd={rd}, rs1={rs1}, rs2={rs2}")
+
+    result = cpu.atomic_result
+    if cpu.atomic_cb(cpu._handle, insn, _read_gpr(cpu, rs1), _read_gpr(cpu, rs2), result,
+                     cpu.atomic_payload) != 0:
+        return False
+
+    if not cpu.atomic_logged:
+        cpu.atomic_logged = True
+        print('[I] atomics are handled by the VP (rebuild the .so if this line never appears)')
+
+    _write_gpr(cpu, rd, result[0])
+    cpu.cpu.write_register('pc', pc_val + 4)
+    cpu.steps += 1
+    return True
+
 
 class C:
     def __init__(self, rv64, n=None):
@@ -14,6 +108,12 @@ class C:
         self.dma_regions = []  # list of (base_address, size, memory_buffer)
         self.breakpoints = []  # list of breakpoints
         self.verbosity = True
+        self.pyread = None
+        self.pywrite = None
+        self.atomic_cb = None
+        self.atomic_payload = ffi.NULL
+        self.atomic_result = ffi.new('uint64_t[1]')
+        self.atomic_logged = False
         self.reset()
 
     def _set_callbacks(self, read, write, payload):
@@ -97,6 +197,9 @@ class C:
             # Fall back to callback
             res = self.write(self._handle, addr, width, value, payload)
             assert res == 0
+
+        self.pyread = pyread
+        self.pywrite = pywrite
         self.callbacks = _pydrofoil.Callbacks(mem_read_intercept=pyread, mem_write_intercept=pywrite)
 
     def set_verbosity(self, verbosity):
@@ -109,24 +212,18 @@ class C:
         # print(f"[DEBUG Python] self.cpu type: {type(self.cpu)}")
 
     def reset(self):
-        # 1. Architektur bestimmen
         if self.rv64:
             cls = _pydrofoil.RISCV64
         else:
             cls = _pydrofoil.RISCV32
-            
-        # 2. CPU Instanz erstellen
         if self.callbacks:
             self.cpu = cls(self.arg, callbacks=self.callbacks)
         else:
             self.cpu = cls(self.arg)
-            
-        # 3. CPU konfigurieren
         self.steps = 0
         self.cpu._set_sail_memory_bounds(0x00000000, 0x4000000000)
         self.set_verbosity(self.verbosity)
         self.cpu._set_htif_tohost(0x900F0000)
-        
      
     def set_hartid(self, hartid):
         try:
@@ -203,6 +300,15 @@ def pydrofoil_cpu_set_ram_read_write_callback(i, read_cb, write_cb, payload):
     return 0
 
 @ffi.def_extern()
+def pydrofoil_cpu_set_atomic_callback(i, atomic_cb, payload):
+    # Must be called after the ram callbacks, those reset the cpu object.
+    print("[I] Setting atomic callback in Python glue code")
+    cpu = ffi.from_handle(i)
+    cpu.atomic_cb = atomic_cb
+    cpu.atomic_payload = payload
+    return 0
+
+@ffi.def_extern()
 def pydrofoil_cpu_simulate(i, steps):
     cpu = ffi.from_handle(i)
     cpu.steps = 0
@@ -215,24 +321,16 @@ def pydrofoil_cpu_simulate(i, steps):
         if cpu.breakpoints and pc_val in cpu.breakpoints:
             return cpu.steps 
 
-        # 2. Hardcoded WFI Fast-Forward
-        # Um Performance-Einbrüche zu vermeiden, lesen wir den Opcode direkt aus dem DMA-Cache
-        for base, size, memory in cpu.dma_regions:
-            if base <= pc_val and (pc_val + 4) <= (base + size):
-                offset = pc_val - base
-                # Pointer-Cast auf 32-Bit, um die Instruktion zu lesen
-                ptr = ffi.cast('uint32_t*', memory + offset)
-                
-                if ptr[0] == 0x10500073:  # RISC-V 'wfi' Opcode
-                    # print(f"[DEBUG Python] WFI detected at PC: {hex(pc_val)}\n")
-                    mip = int(cpu.cpu.read_register('mip'))
-                    mie = int(cpu.cpu.read_register('mie'))
-                    
-                    # WFI pausiert nur, wenn keine Interrupts anstehen
-                    if (mip & mie) == 0:
-                        # MAGIC TRICK: Wir geben die *gesamten* geforderten Steps zurück
-                        return steps
-                break # PC wurde in dieser DMA-Region gefunden, innere Schleife abbrechen
+        # 2. Fetch the insn once: WFI fast-forward and A-extension intercept
+        insn = _fetch_insn(cpu, pc_val)
+        if insn is not None:
+            if insn == 0x10500073:  # RISC-V 'wfi' Opcode
+                mip = int(cpu.cpu.read_register('mip'))
+                mie = int(cpu.cpu.read_register('mie'))
+                if (mip & mie) == 0:
+                    return steps
+            if _emulate_atomic(cpu, pc_val, insn):
+                continue
 
         cpu.step()
 

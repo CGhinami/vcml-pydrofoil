@@ -78,6 +78,8 @@
      int (*m_pydrofoil_cpu_set_verbosity)(void*, int);
      int (*m_pydrofoil_cpu_set_dma_region)(void*, uint64_t, uint64_t, uint8_t*);
      int (*m_pydrofoil_set_interrupt_pending)(void*, uint32_t);
+    int (*m_pydrofoil_cpu_set_atomic_callback)(void*,
+                                               int (*)(void*, uint32_t, uint64_t, uint64_t, uint64_t*, void*), void*);
      vcml::property<std::string> elf;
      vcml::property<std::string> arch_name;
      vcml::property<bool> verbosity;

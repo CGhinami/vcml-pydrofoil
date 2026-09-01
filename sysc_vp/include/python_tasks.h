@@ -46,7 +46,8 @@ enum class Funct {
     SetMIP,
     SetBrkp,
     RemoveBrkp, 
-    SetHartId
+    SetHartId,
+    SetAtomicCb
 };
 
 struct PythonTask {

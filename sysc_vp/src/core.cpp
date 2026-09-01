@@ -75,10 +75,21 @@
      m_pydrofoil_cpu_set_verbosity = (int (*)(void*, int)) dlsym(m_pydrofoil_handle, "pydrofoil_cpu_set_verbosity");
      m_pydrofoil_cpu_set_dma_region = (int (*)(void*, uint64_t, uint64_t, uint8_t*)) dlsym(
          m_pydrofoil_handle, "pydrofoil_cpu_set_dma_region");
-     m_pydrofoil_set_interrupt_pending = (int (*)(void*, uint32_t)) dlsym(m_pydrofoil_handle,
-                                                                          "pydrofoil_set_interrupt_pending");
- 
-     VCML_ERROR_ON(!m_pydrofoil_allocate_cpu, "Could not load symbol: %s", dlerror());
+    m_pydrofoil_set_interrupt_pending = (int (*)(void*, uint32_t)) dlsym(m_pydrofoil_handle,
+                                                                         "pydrofoil_set_interrupt_pending");
+    m_pydrofoil_cpu_set_atomic_callback = (int (*)(void*, int (*)(void*, uint32_t, uint64_t, uint64_t, uint64_t*,
+                                                                  void*),
+                                                   void*)) dlsym(m_pydrofoil_handle,
+                                                                 "pydrofoil_cpu_set_atomic_callback");
+
+    VCML_ERROR_ON(!m_pydrofoil_allocate_cpu, "Could not load symbol: %s", dlerror());
+
+    // Missing symbol means the .so predates the atomic callback. Everything
+    // still runs, but LR/SC stays per-hart and SMP guests corrupt their lists.
+    if(!m_pydrofoil_cpu_set_atomic_callback) {
+        mwr::log_warn("Hart %lu: pydrofoil_cpu_set_atomic_callback missing, cross-hart atomics are NOT emulated",
+                      hart_id);
+    }
  
      mwr::log_info("Running with arch: %d bit", 8 * core_arch.word_size());
      set_little_endian(); // Otherwise the gdbserver inverts the bytes it reads
@@ -596,16 +607,29 @@
  {
      processor::end_of_elaboration();
  
-     backend::PythonTask task;
-     task.py_funct = backend::Funct::SetCb;
-     std::future<uint64_t> done = task.result.get_future();
- 
-     {
-         std::lock_guard lock(task_mutex);
-         task_queue.push(std::move(task));
-     }
-     task_cv.notify_one(); // notify the waiting thread
-     done.get();           // Wait for the result
- }
+    backend::PythonTask task;
+    task.py_funct = backend::Funct::SetCb;
+    std::future<uint64_t> done = task.result.get_future();
+
+    {
+        std::lock_guard lock(task_mutex);
+        task_queue.push(std::move(task));
+    }
+    task_cv.notify_one(); // notify the waiting thread
+    done.get();           // Wait for the result
+
+    // Has to follow SetCb: registering the ram callbacks resets the cpu object.
+    backend::PythonTask atomic_task;
+    atomic_task.py_funct = backend::Funct::SetAtomicCb;
+    std::future<uint64_t> atomic_done = atomic_task.result.get_future();
+
+    {
+        std::lock_guard lock(task_mutex);
+        task_queue.push(std::move(atomic_task));
+    }
+    task_cv.notify_one();
+    if(atomic_done.get() != 0)
+        mwr::log_warn("Hart %lu: registering the atomic callback failed", m_hart_id);
+}
  
  } // namespace core

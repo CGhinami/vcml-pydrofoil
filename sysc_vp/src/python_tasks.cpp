@@ -41,9 +41,21 @@
  #if PROFILING
               Profiler t("SetCb");
  #endif
-              int res = pycore.m_pydrofoil_cpu_set_ram_read_write_callback(pycore.cpu, read_mem, write_mem, &pycore); //
-              task.result.set_value(res);
-          }},
+             int res = pycore.m_pydrofoil_cpu_set_ram_read_write_callback(pycore.cpu, read_mem, write_mem, &pycore); //
+             task.result.set_value(res);
+         }},
+        {Funct::SetAtomicCb,
+         [&pycore](PythonTask& task) {
+#if PROFILING
+             Profiler t("SetAtomicCb");
+#endif
+             if(!pycore.m_pydrofoil_cpu_set_atomic_callback) {
+                 task.result.set_value(-1);
+                 return;
+             }
+             int res = pycore.m_pydrofoil_cpu_set_atomic_callback(pycore.cpu, atomic_mem, &pycore);
+             task.result.set_value(res);
+         }},
          {Funct::GetCycles,
           [&pycore](PythonTask& task) {
  #if PROFILING
