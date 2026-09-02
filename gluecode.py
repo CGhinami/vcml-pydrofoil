@@ -83,7 +83,7 @@ def _emulate_atomic(cpu, pc_val, insn):
     rs1 = (insn >> 15) & 0x1f
     rs2 = (insn >> 20) & 0x1f
     
-    print(f"[I] atomic insn {insn:08x} at pc {pc_val:08x}, rd={rd}, rs1={rs1}, rs2={rs2}")
+    # print(f"[I] atomic insn {insn:08x} at pc {pc_val:08x}, rd={rd}, rs1={rs1}, rs2={rs2}")
 
     result = cpu.atomic_result
     if cpu.atomic_cb(cpu._handle, insn, _read_gpr(cpu, rs1), _read_gpr(cpu, rs2), result,

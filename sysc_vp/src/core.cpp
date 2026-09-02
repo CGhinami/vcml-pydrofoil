@@ -187,8 +187,8 @@
      task.py_funct = backend::Funct::SetMIP;
      task.arg = encoded;
      std::future<uint64_t> done = task.result.get_future();
-     CORE_LOG("Hart " << m_hart_id << " | irq " << irq << " -> mip bit " << bit << (set ? " set" : " clear")
-                      << " pushed to task queue");
+    //  CORE_LOG("Hart " << m_hart_id << " | irq " << irq << " -> mip bit " << bit << (set ? " set" : " clear")
+    //                   << " pushed to task queue");
 
      {
          std::lock_guard lock(task_mutex);
@@ -196,8 +196,8 @@
      }
      task_cv.notify_one();
      done.get();
-     CORE_LOG("Hart " << m_hart_id << " | irq " << irq << " -> mip bit " << bit << (set ? " set" : " clear")
-                      << " completed");
+    //  CORE_LOG("Hart " << m_hart_id << " | irq " << irq << " -> mip bit " << bit << (set ? " set" : " clear")
+    //                   << " completed");
  }
 
  // Called from the SystemC side while the python worker may be running
@@ -292,9 +292,9 @@
  void PydrofoilCore::sc_sync_catch_ex(std::function<void(void)> job)
  {
      try {
-         CORE_LOG("[DEBUG] Hart " << m_hart_id << " | Entering sc_sync_catch_ex");
+        //  CORE_LOG("[DEBUG] Hart " << m_hart_id << " | Entering sc_sync_catch_ex");
          vcml::sc_sync(std::move(job));
-         CORE_LOG("[DEBUG] Hart " << m_hart_id << " | sc_sync_catch_ex executed successfully");
+        //  CORE_LOG("[DEBUG] Hart " << m_hart_id << " | sc_sync_catch_ex executed successfully");
      } catch(...) {
          // Catch all exceptions to prevent SystemC from terminating the simulation
          mwr::log_error("Exception caught in sc_sync_catch_ex");
@@ -331,7 +331,7 @@
      }
  
      task_cv.notify_one(); // notify the waiting thread
-     CORE_LOG("Hart " << m_hart_id << "start: PydrofoilCore::simulate");
+    //  CORE_LOG("Hart " << m_hart_id << "start: PydrofoilCore::simulate");
      while(1) {
          MemAccess memtask;
  
@@ -344,10 +344,10 @@
                  memtask = std::move(memtask_queue.front());
                  memtask_queue.pop();
              } else if(sim_done_flag) {
-                 CORE_LOG("Hart " << m_hart_id << " | Breaking out of memtask loop because sim task is ready");
+                 //  CORE_LOG("Hart " << m_hart_id << " | Breaking out of memtask loop because sim task is ready");
                  break;
              } else {
-                 CORE_LOG("Hart " << m_hart_id << " | DANGER ELSE CONDITION");
+                 //  CORE_LOG("Hart " << m_hart_id << " | DANGER ELSE CONDITION");
                  continue;
              }
          }
@@ -393,7 +393,7 @@
      n_cycles += current_steps;
      check_for_dmi_regions();
      step = false;
-     CORE_LOG("Hart " << m_hart_id << " | end: PydrofoilCore::simulate");
+    //  CORE_LOG("Hart " << m_hart_id << " | end: PydrofoilCore::simulate");
  }
  
  // void PydrofoilCore::simulate(size_t cycles)
@@ -598,8 +598,8 @@
              // static_cast<int>(task.py_funct) << std::endl;
              it->second(task);
          }
-         CORE_LOG("Python worker: Task for hart " << m_hart_id << " with function " << static_cast<int>(task.py_funct)
-         << " completed");
+        //  CORE_LOG("Python worker: Task for hart " << m_hart_id << " with function " << static_cast<int>(task.py_funct)
+        //  << " completed");
      }
  }
  
