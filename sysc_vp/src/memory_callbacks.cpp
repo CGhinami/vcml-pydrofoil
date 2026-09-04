@@ -13,38 +13,104 @@
 #include <iostream>
 #include <mutex>
 #include <unordered_map>
- 
- // C++ member functions cannot be used as callbacks, we need to define C-style functions
- // (not member of the class), but they still need to get access to the class fields
- // so we misuse the payload pointer to pass this as argument
- int write_mem(void* cpu, uint64_t address, int size, uint64_t value, void* payload)
- {
-     auto core = reinterpret_cast<core::PydrofoilCore*>(payload);
- 
-     // std::cout << "[REQUEST] Hart " << core->m_hart_id << " | WRITE to addr: 0x" << std::hex << address
-     //           << " | size: " << std::dec << size << " bytes"
-     //           << " | value: 0x" << std::hex << value << std::dec << std::endl;
- 
-     core::PydrofoilCore::MemAccess memtask;
- 
-     memtask.type = core::PydrofoilCore::MemTask::Write;
-     memtask.addr = address;
-     memtask.size = size;
-     memtask.value = value;
- 
-     std::future<bool> res = memtask.result.get_future();
- 
-     {
-         std::lock_guard lock(core->memtask_mutex);
-         core->memtask_queue.push(std::move(memtask));
-     }
-     core->memtask_cv.notify_one();
- 
-     bool success = res.get();
- 
+
+// Serialises every atomic of every hart against every other one. All harts call
+// into this single VP binary, so unlike a lock inside the per-hart .so copies
+// this one is actually shared.
+std::mutex g_amo_mutex;
+
+struct Reservation {
+    bool valid;
+    uint64_t addr;
+};
+
+// Keyed by hart id, guarded by g_amo_mutex.
+std::unordered_map<uint64_t, Reservation> g_reservations;
+
+void invalidate_reservations(uint64_t word_addr)
+{
+    for(auto& entry : g_reservations) {
+        if(entry.second.valid && entry.second.addr == word_addr)
+            entry.second.valid = false;
+    }
+}
+
+void invalidate_reservations_cb(uint64_t word_addr)
+{
+    std::lock_guard<std::mutex> guard(g_amo_mutex);
+    for(auto& entry : g_reservations) {
+        if(entry.second.valid && entry.second.addr == word_addr)
+            entry.second.valid = false;
+    }
+    // std::cout << "Invalidated reservations for word address: 0x" << std::hex << word_addr << std::dec << std::endl;
+}
+
+// C++ member functions cannot be used as callbacks, we need to define C-style functions
+// (not member of the class), but they still need to get access to the class fields
+// so we misuse the payload pointer to pass this as argument
+int write_mem(void* cpu, uint64_t address, int size, uint64_t value, void* payload)
+{
+    auto core = reinterpret_cast<core::PydrofoilCore*>(payload);
+
+    // std::cout << "[REQUEST] Hart " << core->m_hart_id << " | WRITE to addr: 0x" << std::hex << address
+    //           << " | size: " << std::dec << size << " bytes"
+    //           << " | value: 0x" << std::hex << value << std::dec << std::endl;
+
+    core::PydrofoilCore::MemAccess memtask;
+
+    memtask.type = core::PydrofoilCore::MemTask::Write;
+    memtask.addr = address;
+    memtask.size = size;
+    memtask.value = value;
+
+    std::future<bool> res = memtask.result.get_future();
+
+    {
+        std::lock_guard lock(core->memtask_mutex);
+        core->memtask_queue.push(std::move(memtask));
+    }
+    core->memtask_cv.notify_one();
+
+    bool success = res.get();
+
     if(!success) {
-        std::cout << "[SUCCEEDED] Hart " << core->m_hart_id << " | WRITE to addr: 0x" << std::hex << address
-                  << std::dec << " | status: " << (success ? "OK" : "FAILED") << std::endl;
+        std::cout << "[SUCCEEDED] Hart " << core->m_hart_id << " | WRITE to addr: 0x" << std::hex << address << std::dec
+                  << " | status: " << (success ? "OK" : "FAILED") << std::endl;
+    }
+
+    return success ? 0 : 1;
+}
+
+int write_mem_inv(void* cpu, uint64_t address, int size, uint64_t value, void* payload)
+{
+    invalidate_reservations(address);
+
+    auto core = reinterpret_cast<core::PydrofoilCore*>(payload);
+
+    // std::cout << "[REQUEST] Hart " << core->m_hart_id << " | WRITE to addr: 0x" << std::hex << address
+    //           << " | size: " << std::dec << size << " bytes"
+    //           << " | value: 0x" << std::hex << value << std::dec << std::endl;
+
+    core::PydrofoilCore::MemAccess memtask;
+
+    memtask.type = core::PydrofoilCore::MemTask::Write;
+    memtask.addr = address;
+    memtask.size = size;
+    memtask.value = value;
+
+    std::future<bool> res = memtask.result.get_future();
+
+    {
+        std::lock_guard lock(core->memtask_mutex);
+        core->memtask_queue.push(std::move(memtask));
+    }
+    core->memtask_cv.notify_one();
+
+    bool success = res.get();
+
+    if(!success) {
+        std::cout << "[SUCCEEDED] Hart " << core->m_hart_id << " | WRITE to addr: 0x" << std::hex << address << std::dec
+                  << " | status: " << (success ? "OK" : "FAILED") << std::endl;
     }
 
     return success ? 0 : 1;
@@ -52,29 +118,29 @@
 
 // The debug leads to a debug transaction avoid timig annotation --> no wait --> we dont have to be in a sc_thread
 int read_mem(void* cpu, uint64_t address, int size, void* destination, void* payload)
- {
-     auto core = reinterpret_cast<core::PydrofoilCore*>(payload);
- 
-     // std::cout << "[REQUEST] Hart " << core->m_hart_id << " | READ from addr: 0x" << std::hex << address
-     //           << " | size: " << std::dec << size << " bytes" << std::endl;
- 
-     core::PydrofoilCore::MemAccess memtask;
- 
-     memtask.type = core::PydrofoilCore::MemTask::Read;
-     memtask.addr = address;
-     memtask.size = size;
-     memtask.dest = destination;
- 
-     std::future<bool> res = memtask.result.get_future();
- 
-     {
-         std::lock_guard lock(core->memtask_mutex);
-         core->memtask_queue.push(std::move(memtask));
-     }
-     core->memtask_cv.notify_one();
- 
-     bool success = res.get();
- 
+{
+    auto core = reinterpret_cast<core::PydrofoilCore*>(payload);
+
+    // std::cout << "[REQUEST] Hart " << core->m_hart_id << " | READ from addr: 0x" << std::hex << address
+    //           << " | size: " << std::dec << size << " bytes" << std::endl;
+
+    core::PydrofoilCore::MemAccess memtask;
+
+    memtask.type = core::PydrofoilCore::MemTask::Read;
+    memtask.addr = address;
+    memtask.size = size;
+    memtask.dest = destination;
+
+    std::future<bool> res = memtask.result.get_future();
+
+    {
+        std::lock_guard lock(core->memtask_mutex);
+        core->memtask_queue.push(std::move(memtask));
+    }
+    core->memtask_cv.notify_one();
+
+    bool success = res.get();
+
     if(!success) {
         std::cout << "[SUCCEEDED] Hart " << core->m_hart_id << " | READ from addr: 0x" << std::hex << address
                   << std::dec << " | status: " << (success ? "OK" : "FAILED") << std::endl;
@@ -101,27 +167,6 @@ enum : uint32_t {
     FUNCT5_AMOMINU = 0x18,
     FUNCT5_AMOMAXU = 0x1c
 };
-
-// Serialises every atomic of every hart against every other one. All harts call
-// into this single VP binary, so unlike a lock inside the per-hart .so copies
-// this one is actually shared.
-std::mutex g_amo_mutex;
-
-struct Reservation {
-    bool valid;
-    uint64_t addr;
-};
-
-// Keyed by hart id, guarded by g_amo_mutex.
-std::unordered_map<uint64_t, Reservation> g_reservations;
-
-void invalidate_reservations(uint64_t word_addr)
-{
-    for(auto& entry : g_reservations) {
-        if(entry.second.valid && entry.second.addr == word_addr)
-            entry.second.valid = false;
-    }
-}
 
 // RAM is handed to us as DMI, so an atomic normally needs no bus transaction at
 // all. mem_regions only ever grows and is filled during the first quanta.
@@ -165,16 +210,35 @@ bool amo_compute(uint32_t funct5, uint32_t old_value, uint32_t operand, uint32_t
     const int32_t s_operand = static_cast<int32_t>(operand);
 
     switch(funct5) {
-    case FUNCT5_AMOSWAP: new_value = operand; return true;
-    case FUNCT5_AMOADD: new_value = old_value + operand; return true;
-    case FUNCT5_AMOXOR: new_value = old_value ^ operand; return true;
-    case FUNCT5_AMOOR: new_value = old_value | operand; return true;
-    case FUNCT5_AMOAND: new_value = old_value & operand; return true;
-    case FUNCT5_AMOMIN: new_value = s_old <= s_operand ? old_value : operand; return true;
-    case FUNCT5_AMOMAX: new_value = s_old >= s_operand ? old_value : operand; return true;
-    case FUNCT5_AMOMINU: new_value = old_value <= operand ? old_value : operand; return true;
-    case FUNCT5_AMOMAXU: new_value = old_value >= operand ? old_value : operand; return true;
-    default: return false;
+    case FUNCT5_AMOSWAP:
+        new_value = operand;
+        return true;
+    case FUNCT5_AMOADD:
+        new_value = old_value + operand;
+        return true;
+    case FUNCT5_AMOXOR:
+        new_value = old_value ^ operand;
+        return true;
+    case FUNCT5_AMOOR:
+        new_value = old_value | operand;
+        return true;
+    case FUNCT5_AMOAND:
+        new_value = old_value & operand;
+        return true;
+    case FUNCT5_AMOMIN:
+        new_value = s_old <= s_operand ? old_value : operand;
+        return true;
+    case FUNCT5_AMOMAX:
+        new_value = s_old >= s_operand ? old_value : operand;
+        return true;
+    case FUNCT5_AMOMINU:
+        new_value = old_value <= operand ? old_value : operand;
+        return true;
+    case FUNCT5_AMOMAXU:
+        new_value = old_value >= operand ? old_value : operand;
+        return true;
+    default:
+        return false;
     }
 }
 

@@ -26,6 +26,7 @@ PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name, uint64_t hart_
     n_cycles(0),
     step(true), // For the first execution we want just 1 instruction to run
     stop_worker(false),
+    invalidate_all_regs("invalidate_all_regs", false),
     core_arch(arch_name.c_str(), arch_name == "rv64" ? 64 : 32, architecture::regdb_riscv, 33),
     m_hart_id(hart_id)
 {
@@ -62,6 +63,9 @@ PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name, uint64_t hart_
     m_pydrofoil_cpu_set_ram_read_write_callback = (int (*)(
         void*, int (*)(void*, uint64_t, int, void*, void*), int (*)(void*, uint64_t, int, uint64_t, void*),
         void*)) dlsym(m_pydrofoil_handle, "pydrofoil_cpu_set_ram_read_write_callback");
+    m_pydrofoil_cpu_set_ram_read_write_callback_inv = (int (*)(
+        void*, int (*)(void*, uint64_t, int, void*, void*), int (*)(void*, uint64_t, int, uint64_t, void*), void*,
+        void (*)(uint64_t))) dlsym(m_pydrofoil_handle, "pydrofoil_cpu_set_ram_read_write_callback_inv");
     m_pydrofoil_cpu_cycles = (uint64_t (*)(void*)) dlsym(m_pydrofoil_handle, "pydrofoil_cpu_cycles");
     m_pydrofoil_cpu_set_breakpoint = (int (*)(void*, uint64_t)) dlsym(m_pydrofoil_handle,
                                                                       "pydrofoil_cpu_set_breakpoint");

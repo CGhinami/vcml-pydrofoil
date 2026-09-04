@@ -116,10 +116,11 @@ class C:
         self.atomic_logged = False
         self.reset()
 
-    def _set_callbacks(self, read, write, payload):
+    def _set_callbacks(self, read, write, payload, inv_cb = None):
         self.read = read
         self.write = write
         self.mem = ffi.new('uint64_t[1]')
+        self.inv_cb = inv_cb
         
         WIDTH_MAP = {
             8: ('uint64_t*', 64),
@@ -198,9 +199,44 @@ class C:
             res = self.write(self._handle, addr, width, value, payload)
             assert res == 0
 
+        def pywrite_inv(addr, width, value):
+            # print("[I] pywrite_inv called with addr: 0x%x, width: %d, value: 0x%x\n", addr, width, value)
+            addr = int(addr)
+            value = int(value)
+            ptr_type, bitv_size = resolve_width(width)
+
+            # --- DEBUG CHECK: Abfangen von illegalen Schreibzugriffen ---
+            if 0 <= addr <= 1000:
+                pc_val = int(self.cpu.read_register('pc'))
+                hart_id = int(self.cpu.read_register('mhartid'))
+                mtvec = int(self.cpu.read_register('mtvec'))
+                mepc = int(self.cpu.read_register('mepc'))
+                mcause = int(self.cpu.read_register('mcause'))
+                
+                print(f"[FATAL WRITE] Hart {hart_id} versucht Wert {hex(value)} auf Adresse {hex(addr)} zu schreiben!")
+                print(f"              Aktueller PC: {hex(pc_val)}")
+                print(f"              mtvec: {hex(mtvec)}, mepc: {hex(mepc)}, mcause: {hex(mcause)}")
+            # -------------------------------------------------------------
+
+            # Check DMA regions first
+            ptr = dma_lookup(addr, ptr_type)
+            if ptr is not None: # How useful can it be if we're not using ptr afterwards?
+                ptr[0] = value
+                self.inv_cb(addr)
+                # print(f"[I] Reservations invalidated for address: {hex(addr)}")
+                return
+
+            # Fall back to callback
+            res = self.write(self._handle, addr, width, value, payload)
+            assert res == 0
+
         self.pyread = pyread
-        self.pywrite = pywrite
-        self.callbacks = _pydrofoil.Callbacks(mem_read_intercept=pyread, mem_write_intercept=pywrite)
+        if self.inv_cb is not None:
+            print("[I] Using write callback with reservation invalidation")
+            self.pywrite = pywrite_inv
+        else:
+            self.pywrite = pywrite
+        self.callbacks = _pydrofoil.Callbacks(mem_read_intercept=pyread, mem_write_intercept=self.pywrite)
 
     def set_verbosity(self, verbosity):
         self.verbosity = verbosity
@@ -295,7 +331,15 @@ def pydrofoil_cpu_remove_breakpoint(i, addr):
 @ffi.def_extern()
 def pydrofoil_cpu_set_ram_read_write_callback(i, read_cb, write_cb, payload):
     cpu = ffi.from_handle(i)
-    cpu._set_callbacks(read_cb, write_cb, payload)
+    cpu._set_callbacks(read_cb, write_cb, payload, None)
+    print("set callbacks being called")
+    cpu.reset()
+    return 0
+@ffi.def_extern()
+def pydrofoil_cpu_set_ram_read_write_callback_inv(i, read_cb, write_cb, payload, inv_cb):
+    cpu = ffi.from_handle(i)
+    cpu._set_callbacks(read_cb, write_cb, payload, inv_cb)
+    print("set callbacks inv being called")
     cpu.reset()
     return 0
 

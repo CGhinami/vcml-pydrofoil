@@ -7,14 +7,15 @@
  *                                                                            *
  ******************************************************************************/
 
- #ifndef PYTHON_CALLBACKS_H
- #define PYTHON_CALLBACKS_H
- 
- #include <cstdint>
- 
+#ifndef PYTHON_CALLBACKS_H
+#define PYTHON_CALLBACKS_H
+
+#include <cstdint>
+
 extern "C" {
 int read_mem(void* cpu, uint64_t address, int size, void* destination, void* payload);
 int write_mem(void* cpu, uint64_t address, int size, uint64_t value, void* payload);
+int write_mem_inv(void* cpu, uint64_t address, int size, uint64_t value, void* payload);
 
 // Executes one RISC-V A-extension instruction on behalf of the guest.
 //
@@ -29,6 +30,8 @@ int write_mem(void* cpu, uint64_t address, int size, uint64_t value, void* paylo
 // Returns 0 when the instruction was executed and 'result' holds the value for
 // rd, non-zero when the caller has to fall back to the Sail model.
 int atomic_mem(void* cpu, uint32_t insn, uint64_t address, uint64_t src, uint64_t* result, void* payload);
+void pydrofoil_invalidate_reservations(uint64_t address);
+void invalidate_reservations_cb(uint64_t word_addr);
 }
- 
- #endif
+
+#endif
