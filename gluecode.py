@@ -378,8 +378,8 @@ def pydrofoil_set_interrupt_pending(i, value):
     mip = cpu.cpu.lowlevel.read_CSR(0x344)
     
     # Use an f-string for atomic printing to prevent thread interleaving
-    print(f"mip bit {bit} {'set' if set_bit else 'clear'}, mstatus, mie, mip: "
-          f"{hex(mstatus)} {hex(mie)} {hex(mip)}")
+    # print(f"mip bit {bit} {'set' if set_bit else 'clear'}, mstatus, mie, mip: "
+    #       f"{hex(mstatus)} {hex(mie)} {hex(mip)}")
     
     return 0
 

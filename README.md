@@ -22,6 +22,13 @@ The two parts, Pydrofoil and SystemC-TLM, communicate through a C API.
    ```
     See below more details on how to write your own configuration file and how to run your custom application.
 
+
+3) 
+podman build -t pydrofoil-env .
+podman run -it --rm -v $(pwd):/vcml-pydrofoil pydrofoil-env /bin/bash
+./build_sim.sh
+./launch.sh
+
 ## Repo Organization
 
 | Directory | Description |
