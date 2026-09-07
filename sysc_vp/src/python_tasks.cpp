@@ -10,17 +10,17 @@
 #include "python_tasks.h"
 #include "core.h"
 
-#define PYCORE_LOG(core_ref, stream_args)                       \
-    do {                                                        \
-        std::lock_guard<std::mutex> lock(core_ref.m_log_mutex); \
-        if(core_ref.m_log_file.is_open()) {                     \
-            core_ref.m_log_file << stream_args << std::endl;    \
-            core_ref.m_log_file.flush();                        \
-        } else {                                                \
-            std::cout << stream_args << std::endl;              \
-        }                                                       \
-    } while(0)
-// ---------------------------------------
+// #define PYCORE_LOG(core_ref, stream_args)                       \
+//     do {                                                        \
+//         std::lock_guard<std::mutex> lock(core_ref.m_log_mutex); \
+//         if(core_ref.m_log_file.is_open()) {                     \
+//             core_ref.m_log_file << stream_args << std::endl;    \
+//             core_ref.m_log_file.flush();                        \
+//         } else {                                                \
+//             std::cout << stream_args << std::endl;              \
+//         }                                                       \
+//     } while(0)
+// // ---------------------------------------
 
 namespace backend {
 
@@ -100,7 +100,7 @@ auto create_handlers(core::PydrofoilCore& pycore) -> std::unordered_map<Funct, s
                  if(!hartid_checked) {
                      hartid_checked = true;
                      uint64_t seen = pycore.m_pydrofoil_cpu_read_reg(pycore.cpu, "mhartid");
-                     PYCORE_LOG(pycore, "Hart " << pycore.m_hart_id << " | mhartid at first simulate: " << seen);
+                    //  PYCORE_LOG(pycore, "Hart " << pycore.m_hart_id << " | mhartid at first simulate: " << seen);
                      if(seen != pycore.m_hart_id) {
                          mwr::log_warn("Hart %lu starts executing with mhartid %lu", pycore.m_hart_id,
                                        (unsigned long) seen);
@@ -162,8 +162,8 @@ auto create_handlers(core::PydrofoilCore& pycore) -> std::unordered_map<Funct, s
                  pycore.m_pydrofoil_set_hartid(pycore.cpu, id);
 
                  uint64_t readback = pycore.m_pydrofoil_cpu_read_reg(pycore.cpu, "mhartid");
-                 PYCORE_LOG(pycore,
-                            "Hart " << pycore.m_hart_id << " | mhartid set to " << id << ", read back " << readback);
+                //  PYCORE_LOG(pycore,
+                //             "Hart " << pycore.m_hart_id << " | mhartid set to " << id << ", read back " << readback);
                  if(readback != id) {
                      mwr::log_warn("Hart %lu: mhartid readback %lu does not match requested %lu", pycore.m_hart_id,
                                    (unsigned long) readback, (unsigned long) id);

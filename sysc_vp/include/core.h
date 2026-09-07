@@ -17,25 +17,47 @@
 #include <unordered_map>
 #include "arch.h"
 #include "vcml/properties/property.h"
-// #include "deps/vcml/include/vcml/properties/properties.h"
+#include <sstream>
 
-#define CORE_LOG(stream_args)                          \
-    do {                                               \
-        std::lock_guard<std::mutex> lock(m_log_mutex); \
-        if(m_log_file.is_open()) {                     \
-            m_log_file << stream_args << std::endl;    \
-            m_log_file.flush();                        \
-        } else {                                       \
-            std::cout << stream_args << std::endl;     \
-        }                                              \
-    } while(0)
-
-// FOrward declaration
 namespace backend {
 struct PythonTask;
 }
 
+#define CORE_LOG(stream_args)                \
+    do {                                     \
+        std::ostringstream _oss;             \
+        _oss << stream_args;                 \
+        if (logger) {                        \
+            logger->log(_oss.str());         \
+        }                                    \
+    } while(0)
+
+
 namespace core {
+
+
+class CoreLogger {
+public: 
+    virtual ~CoreLogger() = default;
+    virtual void log(const std::string& stream_args) = 0;
+};
+
+class TerminalLogger : public CoreLogger {
+public:
+    ~TerminalLogger() override = default; 
+    void log(const std::string& stream_args) override;
+};
+
+class FileLogger : public CoreLogger {
+private:
+    std::mutex m_log_mutex;
+    std::string m_log_path; // FIXED: renamed from log_path
+    std::ofstream m_log_file;
+public:
+    FileLogger(const std::string& log_path);
+    ~FileLogger() override;
+    void log(const std::string& stream_args) override;
+};
 
 enum : size_t {
     MEIP = 0, // irq for machine-level external interrupts
@@ -92,6 +114,7 @@ class PydrofoilCore : public vcml::processor {
 
     void* cpu;
     vcml::property<bool> invalidate_all_regs;
+    vcml::property<bool> log_to_file;
     bool use_dmi;
     tlm::tlm_dmi dmi_cache;
     unsigned long int n_cycles;
@@ -139,11 +162,10 @@ class PydrofoilCore : public vcml::processor {
     virtual bool remove_breakpoint(vcml::u64 addr) override;
     void sc_sync_catch_ex(std::function<void(void)> job);
     uint64_t m_hart_id;
-    std::ofstream m_log_file;
-    std::mutex m_log_mutex;
     bool sim_done_flag = false; // <-- NEU
 
     private:
+    CoreLogger* logger;
     bool step;
 
     // Every edge is queued: a set/clear pair inside one quantum must not
@@ -170,5 +192,4 @@ class PydrofoilCore : public vcml::processor {
 };
 
 } // namespace core
-
 #endif

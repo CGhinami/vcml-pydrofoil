@@ -26,18 +26,27 @@ PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name, uint64_t hart_
     n_cycles(0),
     step(true), // For the first execution we want just 1 instruction to run
     stop_worker(false),
+    log_to_file("log_to_file", false),
     invalidate_all_regs("invalidate_all_regs", false),
-    core_arch(arch_name.c_str(), arch_name == "rv64" ? 64 : 32, architecture::regdb_riscv, 33),
-    m_hart_id(hart_id)
+    core_arch(arch_name.c_str(), arch_name == "rv64" ? 64 : 32, architecture::regdb_riscv, 33), m_hart_id(hart_id)
 {
-    std::filesystem::create_directories("logs"); // Sicherstellen, dass der Ordner existiert
+    
+    if (log_to_file) {
+        std::string path = "logs/core" + std::to_string(hart_id) + "_debug.txt";
+        logger = new FileLogger(path);
+    } else {
+        logger = new TerminalLogger();
+    }
+    /*std::filesystem::create_directories("logs"); // Sicherstellen, dass der Ordner existiert
     std::string log_path = "logs/core" + std::to_string(hart_id) + "_debug.txt";
     m_log_file.open(log_path, std::ios::out | std::ios::trunc);
     if(m_log_file.is_open()) {
         mwr::log_info("Opened debug log file for Hart %lu at %s", hart_id, log_path.c_str());
     }
+    if()
+    */
 
-    // --- ISOLATED LIBRARY SETUP ---
+        // --- ISOLATED LIBRARY SETUP ---
     std::string base_lib = "./libpydrofoilcapi_cffi.so";
     std::string isolated_dir = "/tmp/isolated_libs";
     std::filesystem::create_directories(isolated_dir);
@@ -154,9 +163,9 @@ PydrofoilCore::~PydrofoilCore()
         task_cv.notify_one();
         done.get();
     }
-    if(m_log_file.is_open()) {
-        m_log_file.close();
-    }
+    // if(m_log_file.is_open()) {
+    //     m_log_file.close();
+    // }
 
     python_worker_thread.join();
     // --- ADDED FOR DLOPEN ---
@@ -164,6 +173,7 @@ PydrofoilCore::~PydrofoilCore()
         dlclose(m_pydrofoil_handle);
     }
     // ------------------------
+    delete logger;
 }
 
 static bool mip_bit_for_irq(size_t irq, size_t& bit)
@@ -317,6 +327,7 @@ void PydrofoilCore::sc_sync_catch_ex(std::function<void(void)> job)
 // Called from a coroutine
 void PydrofoilCore::simulate(size_t cycles)
 {
+    CORE_LOG("test " << cycles << "\n");
     std::queue<std::pair<size_t, bool>> pending_irqs;
     {
         std::lock_guard<std::mutex> lock(irq_mutex);
@@ -646,4 +657,26 @@ void PydrofoilCore::end_of_elaboration()
         mwr::log_warn("Hart %lu: registering the atomic callback failed", m_hart_id);
 }
 
-} // namespace core
+FileLogger::FileLogger(const std::string& log_path) : m_log_path(log_path) // FIXED: log_path
+{
+    m_log_file.open(m_log_path, std::ios::out | std::ios::trunc);
+}
+
+FileLogger::~FileLogger() {
+    if(m_log_file.is_open()) m_log_file.close();
+}
+
+void FileLogger::log(const std::string& stream_args) { // FIXED: std::string
+    std::lock_guard<std::mutex> lock(m_log_mutex); 
+    if(m_log_file.is_open()) {                     
+        m_log_file << stream_args << std::endl;    
+        m_log_file.flush();                        
+    } else {                                       
+        std::cout << stream_args << std::endl;     
+    }                                              
+}
+
+void TerminalLogger::log(const std::string& stream_args) { // FIXED: std::string
+    std::cout << stream_args << std::endl;
+}
+}
