@@ -37,16 +37,6 @@ PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name, uint64_t hart_
     } else {
         logger = new TerminalLogger();
     }
-    /*std::filesystem::create_directories("logs"); // Sicherstellen, dass der Ordner existiert
-    std::string log_path = "logs/core" + std::to_string(hart_id) + "_debug.txt";
-    m_log_file.open(log_path, std::ios::out | std::ios::trunc);
-    if(m_log_file.is_open()) {
-        mwr::log_info("Opened debug log file for Hart %lu at %s", hart_id, log_path.c_str());
-    }
-    if()
-    */
-
-        // --- ISOLATED LIBRARY SETUP ---
     std::string base_lib = "./libpydrofoilcapi_cffi.so";
     std::string isolated_dir = "/tmp/isolated_libs";
     std::filesystem::create_directories(isolated_dir);
@@ -56,13 +46,11 @@ PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name, uint64_t hart_
 
     try {
         std::filesystem::copy_file(base_lib, inst_lib, std::filesystem::copy_options::overwrite_existing);
-        mwr::log_info("Created isolated library instance for hart %lu at %s", hart_id, inst_lib.c_str());
     } catch(std::filesystem::filesystem_error& e) {
         VCML_ERROR("Failed to copy library for multicore isolation: %s", e.what());
     }
 
     m_pydrofoil_handle = dlmopen(LM_ID_NEWLM, inst_lib.c_str(), RTLD_NOW | RTLD_LOCAL);
-    // m_pydrofoil_handle = dlopen(inst_lib.c_str(), RTLD_NOW | RTLD_LOCAL); // use this for async=false
     VCML_ERROR_ON(!m_pydrofoil_handle, "Could not open unique Pydrofoil library '%s': %s", inst_lib.c_str(), dlerror());
 
     // --- 2. MAP THE FUNCTION POINTERS ---
@@ -96,14 +84,10 @@ PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name, uint64_t hart_
 
     VCML_ERROR_ON(!m_pydrofoil_allocate_cpu, "Could not load symbol: %s", dlerror());
 
-    // Missing symbol means the .so predates the atomic callback. Everything
-    // still runs, but LR/SC stays per-hart and SMP guests corrupt their lists.
     if(!m_pydrofoil_cpu_set_atomic_callback) {
         mwr::log_warn("Hart %lu: pydrofoil_cpu_set_atomic_callback missing, cross-hart atomics are NOT emulated",
                       hart_id);
     }
-
-    mwr::log_info("Running with arch: %d bit and async: %s", 8 * core_arch.word_size(), async.get() ? "true" : "false");
 
     set_little_endian(); // Otherwise the gdbserver inverts the bytes it reads
 
@@ -118,15 +102,21 @@ PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name, uint64_t hart_
         std::lock_guard lock(task_mutex);
         task_queue.push(std::move(task));
     }
-    task_cv.notify_one(); // notify the waiting thread
-    done.get();           // Wait for the result
+    task_cv.notify_one();
+    done.get();           
 
     set_verbosity(verbosity.get());
 
     for(size_t i = 0; i < core_arch.reg_number(); ++i)
         define_cpureg_rw(i, core_arch.get_regs_ptr()[i].gdb_name, core_arch.word_size());
-    // std::cout << "DEBUG: C++ Constructor for " << name << " has hart_id: " << m_hart_id << " hart_id value is: " <<
-    // hart_id << std::endl;
+
+    // print core settings:
+    // mwr.log_info("hartid: %d",)
+    std::cout<< "hartid:   " << m_hart_id << std::endl << 
+                "async:    " << async << std::endl <<
+                "async_rate:    " << async_rate << std::endl <<
+                "inval_regs: " << invalidate_all_regs << std::endl <<
+                "elf_path:   " << elf << std::endl;
 }
 
 void PydrofoilCore::test_reg_access(size_t regno)
@@ -327,7 +317,7 @@ void PydrofoilCore::sc_sync_catch_ex(std::function<void(void)> job)
 // Called from a coroutine
 void PydrofoilCore::simulate(size_t cycles)
 {
-    CORE_LOG("test " << cycles << "\n");
+    // CORE_LOG("test " << cycles << "\n");
     std::queue<std::pair<size_t, bool>> pending_irqs;
     {
         std::lock_guard<std::mutex> lock(irq_mutex);

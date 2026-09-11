@@ -92,7 +92,7 @@ def _emulate_atomic(cpu, pc_val, insn):
 
     if not cpu.atomic_logged:
         cpu.atomic_logged = True
-        print('[I] atomics are handled by the VP (rebuild the .so if this line never appears)')
+        print('[I] atomics are handled by the VP')
 
     _write_gpr(cpu, rd, result[0])
     cpu.cpu.write_register('pc', pc_val + 4)
@@ -279,8 +279,8 @@ def pydrofoil_allocate_cpu(spec, fn):
         filename = ffi.string(fn).decode('utf-8')
     else:
         filename = None
-    print("rv64" if rv64 else "rv32")
-    print(filename)
+    # print("rv64" if rv64 else "rv32")
+    # print(filename)
 
     all_cpu_handles.append(res := ffi.new_handle(cpu := C(rv64, filename)))
     cpu._handle = res

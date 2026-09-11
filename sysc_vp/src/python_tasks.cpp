@@ -40,14 +40,14 @@ auto create_handlers(core::PydrofoilCore& pycore) -> std::unordered_map<Funct, s
 #if PROFILING
                  Profiler t("SetCb");
 #endif
-                 std::cout << "invlaidate all regs set to: " << pycore.invalidate_all_regs << std::endl;
+                //  std::cout << "invlaidate all regs set to: " << pycore.invalidate_all_regs << std::endl;
                  int res = 0;
                  if(pycore.invalidate_all_regs) {
-                     mwr::log_info("Hart %lu | reservations are invalidated at every write", pycore.m_hart_id);
+                    //  mwr::log_info("Hart %lu | reservations are invalidated at every write", pycore.m_hart_id);
                      res = pycore.m_pydrofoil_cpu_set_ram_read_write_callback_inv(
                          pycore.cpu, read_mem, write_mem_inv, &pycore, invalidate_reservations_cb); //
                  } else {
-                     mwr::log_info("Hart %lu | reservations are NOT invalidated at every write", pycore.m_hart_id);
+                    //  mwr::log_info("Hart %lu | reservations are NOT invalidated at every write", pycore.m_hart_id);
                      res = pycore.m_pydrofoil_cpu_set_ram_read_write_callback(pycore.cpu, read_mem, write_mem, &pycore);
                  }
                  task.result.set_value(res);
