@@ -1,0 +1,58 @@
+    
+[
+        {"n_cores": 1,  "quantum": "100ns",    "async_mode": false,    "sim_async_rate": 10,   "inval_regs": false,    "speedup_wfi": false,   "simulate_atomics": false,  "elf_path": "benchmark/zepyhr/1core/build/zephyrA.elf"},
+        {"n_cores": 1,  "quantum": "1000ns",    "async_mode": false,    "sim_async_rate": 10,   "inval_regs": false,    "speedup_wfi": false,   "simulate_atomics": false,  "elf_path": "benchmark/zepyhr/1core/build/zephyrA.elf"},
+        {"n_cores": 1,  "quantum": "100000ns",    "async_mode": false,    "sim_async_rate": 10,   "inval_regs": false,    "speedup_wfi": false,   "simulate_atomics": false,  "elf_path": "benchmark/zepyhr/1core/build/zephyrA.elf"},
+        {"n_cores": 1,  "quantum": "1000000ns",    "async_mode": false,    "sim_async_rate": 10,   "inval_regs": false,    "speedup_wfi": false,   "simulate_atomics": false,  "elf_path": "benchmark/zepyhr/1core/build/zephyrA.elf"},
+
+        {"n_cores": 1,  "quantum": "100ns",    "async_mode": true,    "sim_async_rate": 10,   "inval_regs": true,    "speedup_wfi": false,   "simulate_atomics": true,  "elf_path": "benchmark/zepyhr/1core/build/zephyrA.elf"},
+        {"n_cores": 1,  "quantum": "1000ns",    "async_mode": true,    "sim_async_rate": 10,   "inval_regs": true,    "speedup_wfi": false,   "simulate_atomics": true,  "elf_path": "benchmark/zepyhr/1core/build/zephyrA.elf"},
+        {"n_cores": 1,  "quantum": "100000ns",    "async_mode": true,    "sim_async_rate": 10,   "inval_regs": true,    "speedup_wfi": false,   "simulate_atomics": true,  "elf_path": "benchmark/zepyhr/1core/build/zephyrA.elf"},
+        {"n_cores": 1,  "quantum": "1000000ns",    "async_mode": true,    "sim_async_rate": 10,   "inval_regs": true,    "speedup_wfi": false,   "simulate_atomics": true,  "elf_path": "benchmark/zepyhr/1core/build/zephyrA.elf"},
+
+        {"n_cores": 1,  "quantum": "100ns",    "async_mode": true,    "sim_async_rate": 5,   "inval_regs": true,    "speedup_wfi": false,   "simulate_atomics": true,  "elf_path": "benchmark/zepyhr/1core/build/zephyrA.elf"},
+        {"n_cores": 1,  "quantum": "1000ns",    "async_mode": true,    "sim_async_rate": 5,   "inval_regs": true,    "speedup_wfi": false,   "simulate_atomics": true,  "elf_path": "benchmark/zepyhr/1core/build/zephyrA.elf"},
+        {"n_cores": 1,  "quantum": "100000ns",    "async_mode": true,    "sim_async_rate": 5,   "inval_regs": true,    "speedup_wfi": false,   "simulate_atomics": true,  "elf_path": "benchmark/zepyhr/1core/build/zephyrA.elf"},
+        {"n_cores": 1,  "quantum": "1000000ns",    "async_mode": true,    "sim_async_rate": 5,   "inval_regs": true,    "speedup_wfi": false,   "simulate_atomics": true,  "elf_path": "benchmark/zepyhr/1core/build/zephyrA.elf"},
+
+        {"n_cores": 1,  "quantum": "100ns",    "async_mode": true,    "sim_async_rate": 1,   "inval_regs": true,    "speedup_wfi": false,   "simulate_atomics": true,  "elf_path": "benchmark/zepyhr/1core/build/zephyrA.elf"},
+        {"n_cores": 1,  "quantum": "1000ns",    "async_mode": true,    "sim_async_rate": 1,   "inval_regs": true,    "speedup_wfi": false,   "simulate_atomics": true,  "elf_path": "benchmark/zepyhr/1core/build/zephyrA.elf"},
+        {"n_cores": 1,  "quantum": "100000ns",    "async_mode": true,    "sim_async_rate": 1,   "inval_regs": true,    "speedup_wfi": false,   "simulate_atomics": true,  "elf_path": "benchmark/zepyhr/1core/build/zephyrA.elf"},
+        {"n_cores": 1,  "quantum": "1000000ns",    "async_mode": true,    "sim_async_rate": 1,   "inval_regs": true,    "speedup_wfi": false,   "simulate_atomics": true,  "elf_path": "benchmark/zepyhr/1core/build/zephyrA.elf"},
+
+        {"n_cores": 1,  "quantum": "100ns",    "async_mode": false,    "sim_async_rate": 10,   "inval_regs": false,    "speedup_wfi": false,   "simulate_atomics": false,  "elf_path": "benchmark/zepyhr/1core/build/zephyrW.elf"},
+        {"n_cores": 1,  "quantum": "1000ns",    "async_mode": false,    "sim_async_rate": 10,   "inval_regs": false,    "speedup_wfi": false,   "simulate_atomics": false,  "elf_path": "benchmark/zepyhr/1core/build/zephyrW.elf"},
+        {"n_cores": 1,  "quantum": "100000ns",    "async_mode": false,    "sim_async_rate": 10,   "inval_regs": false,    "speedup_wfi": false,   "simulate_atomics": false,  "elf_path": "benchmark/zepyhr/1core/build/zephyrW.elf"},
+        {"n_cores": 1,  "quantum": "1000000ns",    "async_mode": false,    "sim_async_rate": 10,   "inval_regs": false,    "speedup_wfi": false,   "simulate_atomics": false,  "elf_path": "benchmark/zepyhr/1core/build/zephyrW.elf"},
+
+        {"n_cores": 1,  "quantum": "100ns",    "async_mode": true,    "sim_async_rate": 10,   "inval_regs": true,    "speedup_wfi": false,   "simulate_atomics": true,  "elf_path": "benchmark/zepyhr/1core/build/zephyrW.elf"},
+        {"n_cores": 1,  "quantum": "1000ns",    "async_mode": true,    "sim_async_rate": 10,   "inval_regs": true,    "speedup_wfi": false,   "simulate_atomics": true,  "elf_path": "benchmark/zepyhr/1core/build/zephyrW.elf"},
+        {"n_cores": 1,  "quantum": "100000ns",    "async_mode": true,    "sim_async_rate": 10,   "inval_regs": true,    "speedup_wfi": false,   "simulate_atomics": true,  "elf_path": "benchmark/zepyhr/1core/build/zephyrW.elf"},
+        {"n_cores": 1,  "quantum": "1000000ns",    "async_mode": true,    "sim_async_rate": 10,   "inval_regs": true,    "speedup_wfi": false,   "simulate_atomics": true,  "elf_path": "benchmark/zepyhr/1core/build/zephyrW.elf"},
+        {"n_cores": 1,  "quantum": "100ns",    "async_mode": true,    "sim_async_rate": 5,   "inval_regs": true,    "speedup_wfi": false,   "simulate_atomics": true,  "elf_path": "benchmark/zepyhr/1core/build/zephyrW.elf"},
+        {"n_cores": 1,  "quantum": "1000ns",    "async_mode": true,    "sim_async_rate": 5,   "inval_regs": true,    "speedup_wfi": false,   "simulate_atomics": true,  "elf_path": "benchmark/zepyhr/1core/build/zephyrW.elf"},
+        {"n_cores": 1,  "quantum": "100000ns",    "async_mode": true,    "sim_async_rate": 5,   "inval_regs": true,    "speedup_wfi": false,   "simulate_atomics": true,  "elf_path": "benchmark/zepyhr/1core/build/zephyrW.elf"},
+        {"n_cores": 1,  "quantum": "1000000ns",    "async_mode": true,    "sim_async_rate": 5,   "inval_regs": true,    "speedup_wfi": false,   "simulate_atomics": true,  "elf_path": "benchmark/zepyhr/1core/build/zephyrW.elf"},
+        {"n_cores": 1,  "quantum": "100ns",    "async_mode": true,    "sim_async_rate": 1,   "inval_regs": true,    "speedup_wfi": false,   "simulate_atomics": true,  "elf_path": "benchmark/zepyhr/1core/build/zephyrW.elf"},
+        {"n_cores": 1,  "quantum": "1000ns",    "async_mode": true,    "sim_async_rate": 1,   "inval_regs": true,    "speedup_wfi": false,   "simulate_atomics": true,  "elf_path": "benchmark/zepyhr/1core/build/zephyrW.elf"},
+        {"n_cores": 1,  "quantum": "100000ns",    "async_mode": true,    "sim_async_rate": 1,   "inval_regs": true,    "speedup_wfi": false,   "simulate_atomics": true,  "elf_path": "benchmark/zepyhr/1core/build/zephyrW.elf"},
+        {"n_cores": 1,  "quantum": "1000000ns",    "async_mode": true,    "sim_async_rate": 1,   "inval_regs": true,    "speedup_wfi": false,   "simulate_atomics": true,  "elf_path": "benchmark/zepyhr/1core/build/zephyrW.elf"},
+
+        {"n_cores": 1,  "quantum": "100ns",    "async_mode": false,    "sim_async_rate": 10,   "inval_regs": false,    "speedup_wfi": false,   "simulate_atomics": false,  "elf_path": "benchmark/zepyhr/1core/build/zephyrS.elf"},
+        {"n_cores": 1,  "quantum": "1000ns",    "async_mode": false,    "sim_async_rate": 10,   "inval_regs": false,    "speedup_wfi": false,   "simulate_atomics": false,  "elf_path": "benchmark/zepyhr/1core/build/zephyrS.elf"},
+        {"n_cores": 1,  "quantum": "100000ns",    "async_mode": false,    "sim_async_rate": 10,   "inval_regs": false,    "speedup_wfi": false,   "simulate_atomics": false,  "elf_path": "benchmark/zepyhr/1core/build/zephyrS.elf"},
+        {"n_cores": 1,  "quantum": "1000000ns",    "async_mode": false,    "sim_async_rate": 10,   "inval_regs": false,    "speedup_wfi": false,   "simulate_atomics": false,  "elf_path": "benchmark/zepyhr/1core/build/zephyrS.elf"},
+
+        {"n_cores": 1,  "quantum": "100ns",    "async_mode": true,    "sim_async_rate": 10,   "inval_regs": true,    "speedup_wfi": false,   "simulate_atomics": true,  "elf_path": "benchmark/zepyhr/1core/build/zephyrS.elf"},
+        {"n_cores": 1,  "quantum": "1000ns",    "async_mode": true,    "sim_async_rate": 10,   "inval_regs": true,    "speedup_wfi": false,   "simulate_atomics": true,  "elf_path": "benchmark/zepyhr/1core/build/zephyrS.elf"},
+        {"n_cores": 1,  "quantum": "100000ns",    "async_mode": true,    "sim_async_rate": 10,   "inval_regs": true,    "speedup_wfi": false,   "simulate_atomics": true,  "elf_path": "benchmark/zepyhr/1core/build/zephyrS.elf"},
+        {"n_cores": 1,  "quantum": "1000000ns",    "async_mode": true,    "sim_async_rate": 10,   "inval_regs": true,    "speedup_wfi": false,   "simulate_atomics": true,  "elf_path": "benchmark/zepyhr/1core/build/zephyrS.elf"},
+        {"n_cores": 1,  "quantum": "100ns",    "async_mode": true,    "sim_async_rate": 5,   "inval_regs": true,    "speedup_wfi": false,   "simulate_atomics": true,  "elf_path": "benchmark/zepyhr/1core/build/zephyrS.elf"},
+        {"n_cores": 1,  "quantum": "1000ns",    "async_mode": true,    "sim_async_rate": 5,   "inval_regs": true,    "speedup_wfi": false,   "simulate_atomics": true,  "elf_path": "benchmark/zepyhr/1core/build/zephyrS.elf"},
+        {"n_cores": 1,  "quantum": "100000ns",    "async_mode": true,    "sim_async_rate": 5,   "inval_regs": true,    "speedup_wfi": false,   "simulate_atomics": true,  "elf_path": "benchmark/zepyhr/1core/build/zephyrS.elf"},
+        {"n_cores": 1,  "quantum": "1000000ns",    "async_mode": true,    "sim_async_rate": 5,   "inval_regs": true,    "speedup_wfi": false,   "simulate_atomics": true,  "elf_path": "benchmark/zepyhr/1core/build/zephyrS.elf"},
+
+        {"n_cores": 1,  "quantum": "100ns",    "async_mode": true,    "sim_async_rate": 1,   "inval_regs": true,    "speedup_wfi": false,   "simulate_atomics": true,  "elf_path": "benchmark/zepyhr/1core/build/zephyrS.elf"},
+        {"n_cores": 1,  "quantum": "1000ns",    "async_mode": true,    "sim_async_rate": 1,   "inval_regs": true,    "speedup_wfi": false,   "simulate_atomics": true,  "elf_path": "benchmark/zepyhr/1core/build/zephyrS.elf"},
+        {"n_cores": 1,  "quantum": "100000ns",    "async_mode": true,    "sim_async_rate": 1,   "inval_regs": true,    "speedup_wfi": false,   "simulate_atomics": true,  "elf_path": "benchmark/zepyhr/1core/build/zephyrS.elf"},
+        {"n_cores": 1,  "quantum": "1000000ns",    "async_mode": true,    "sim_async_rate": 1,   "inval_regs": true,    "speedup_wfi": false,   "simulate_atomics": true,  "elf_path": "benchmark/zepyhr/1core/build/zephyrS.elf"}]

@@ -22,7 +22,11 @@ typedef int (*pydrofoil_mem_write_cb)(
 // functions that come from rpython go here
 CFFI_DLLEXPORT void *pydrofoil_allocate_cpu(char *, const char *);
 CFFI_DLLEXPORT int pydrofoil_free_cpu(void *);
-CFFI_DLLEXPORT int pydrofoil_cpu_simulate(void *, size_t);
+CFFI_DLLEXPORT int pydrofoil_cpu_simulate_wfi_atomics(void *, size_t);
+CFFI_DLLEXPORT int pydrofoil_cpu_simulate_no_wfi_atomics(void *, size_t);
+CFFI_DLLEXPORT int pydrofoil_cpu_simulate_wfi_no_atomics(void *, size_t);
+CFFI_DLLEXPORT int pydrofoil_cpu_simulate_no_wfi_no_atomics(void *, size_t);
+
 CFFI_DLLEXPORT uint64_t pydrofoil_cpu_cycles(void *);
 CFFI_DLLEXPORT int pydrofoil_cpu_reset(void *);
 

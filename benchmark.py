@@ -3,6 +3,7 @@ import os
 import csv
 import re
 import sys
+import json
 
 # Name der CSV-Datenbank
 CSV_FILENAME = "benchmark_results.csv"
@@ -18,9 +19,9 @@ def init_csv():
                 "elf", "duration", "runtime", "cycles per core", "nins"
             ])
 
-def run_benchmark(iteration, n_cores, quantum, async_mode, sim_async_rate, inval_regs, elf_path):
+def run_benchmark(iteration, n_cores, quantum, async_mode, sim_async_rate, inval_regs, speedup_wfi, simulate_atomics, elf_path):
     # Added [Run {iteration}] to the print output so you can track progress
-    print(f"\n--- Starting Benchmark [Run {iteration}]: {n_cores} cores, quantum={quantum}, async_mode: {async_mode}, async_rate: {sim_async_rate}, inval_refs= {inval_regs}, elf_path= {elf_path} ---")
+    print(f"\n--- Starting Benchmark [Run {iteration}]: {n_cores} cores, quantum={quantum}, async_mode: {async_mode}, async_rate: {sim_async_rate}, inval_regs= {inval_regs}, speedup_wfi: {speedup_wfi}, simulate_atomics: {simulate_atomics}, elf_path= {elf_path} ---")
     
     # Base command: launch script and config file
     cmd = [
@@ -34,6 +35,8 @@ def run_benchmark(iteration, n_cores, quantum, async_mode, sim_async_rate, inval
     cmd.extend(["-c", f"sim_async={str(async_mode).lower()}"])
     cmd.extend(["-c", f"sim_async_rate={sim_async_rate}"])
     cmd.extend(["-c", f"sim_inval_regs={str(inval_regs).lower()}"])
+    cmd.extend(["-c", f"speedup_wfi={str(speedup_wfi).lower()}"])
+    cmd.extend(["-c", f"simulate_atomics={str(simulate_atomics).lower()}"])
     cmd.extend(["-c", f"sim_elf={elf_path}"])
 
     # Variablen zum Speichern der geparsten Ergebnisse
@@ -87,126 +90,17 @@ def run_benchmark(iteration, n_cores, quantum, async_mode, sim_async_rate, inval
     with open(CSV_FILENAME, mode='a', newline='') as f:
         writer = csv.writer(f)
         writer.writerow([
-            iteration, n_cores, quantum, async_mode, sim_async_rate, inval_regs, elf_path, 
+            iteration, n_cores, quantum, async_mode, sim_async_rate, inval_regs, speedup_wfi, simulate_atomics, elf_path, 
             res_duration, res_runtime, res_cycles, res_nins
         ])
     
     print(f"[INFO] Saved results for this run to {CSV_FILENAME}")
 
-# Example: Run a sweep over different core counts
 if __name__ == "__main__":
     init_csv()
-    
-    # Hier definierst du deine Liste an Konfigurationen
-    configurations = [
-        # asnyc = false
-        {
-            "n_cores": 1,
-            "quantum": "1000ns",
-            "async_mode": False,
-            "sim_async_rate": 10,
-            "inval_regs": True,
-            "elf_path": "benchmark/zepyhr/1core/build/zephyrW.elf"
-        },
-        {
-            "n_cores": 1,
-            "quantum": "100000ns",
-            "async_mode": False,
-            "sim_async_rate": 10,
-            "inval_regs": True,
-            "elf_path": "benchmark/zepyhr/1core/build/zephyrW.elf"
-        },
-        {
-            "n_cores": 1,
-            "quantum": "1000000ns",
-            "async_mode": False,
-            "sim_async_rate": 10,
-            "inval_regs": True,
-            "elf_path": "benchmark/zepyhr/1core/build/zephyrW.elf"
-        },
-        # async = true
-        # rate = 1
-        {
-            "n_cores": 1,
-            "quantum": "1000ns",
-            "async_mode": True,
-            "sim_async_rate": 1,
-            "inval_regs": True,
-            "elf_path": "benchmark/zepyhr/1core/build/zephyrW.elf"
-        },
-        {
-            "n_cores": 1,
-            "quantum": "100000ns",
-            "async_mode": True,
-            "sim_async_rate": 1,
-            "inval_regs": True,
-            "elf_path": "benchmark/zepyhr/1core/build/zephyrW.elf"
-        },
-        {
-            "n_cores": 1,
-            "quantum": "1000000ns",
-            "async_mode": True,
-            "sim_async_rate": 1,
-            "inval_regs": True,
-            "elf_path": "benchmark/zepyhr/1core/build/zephyrW.elf"
-        },
-        # async = true
-        # rate = 5
-        {
-            "n_cores": 1,
-            "quantum": "1000ns",
-            "async_mode": True,
-            "sim_async_rate": 5,
-            "inval_regs": True,
-            "elf_path": "benchmark/zepyhr/1core/build/zephyrW.elf"
-        },
-        {
-            "n_cores": 1,
-            "quantum": "100000ns",
-            "async_mode": True,
-            "sim_async_rate": 5,
-            "inval_regs": True,
-            "elf_path": "benchmark/zepyhr/1core/build/zephyrW.elf"
-        },
-        {
-            "n_cores": 1,
-            "quantum": "1000000ns",
-            "async_mode": True,
-            "sim_async_rate": 5,
-            "inval_regs": True,
-            "elf_path": "benchmark/zepyhr/1core/build/zephyrW.elf"
-        },
-        # async = true
-        # rate = 10
-        {
-            "n_cores": 1,
-            "quantum": "1000ns",
-            "async_mode": True,
-            "sim_async_rate": 10,
-            "inval_regs": True,
-            "elf_path": "benchmark/zepyhr/1core/build/zephyrW.elf"
-        },
-        {
-            "n_cores": 1,
-            "quantum": "100000ns",
-            "async_mode": True,
-            "sim_async_rate": 10,
-            "inval_regs": True,
-            "elf_path": "benchmark/zepyhr/1core/build/zephyrW.elf"
-        },
-        {
-            "n_cores": 1,
-            "quantum": "1000000ns",
-            "async_mode": True,
-            "sim_async_rate": 10,
-            "inval_regs": True,
-            "elf_path": "benchmark/zepyhr/1core/build/zephyrW.elf"
-        },
-
-
-
-
-    ]
+    config_path = "benchmark/zepyhr/configs/1core.json"
+    with open(config_path, "r", encoding="utf-8") as f:
+        configurations = json.load(f)
     
     # Set how many times you want to run each configuration
     NUM_RUNS = 5

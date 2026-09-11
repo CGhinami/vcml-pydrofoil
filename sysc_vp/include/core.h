@@ -113,6 +113,8 @@ class PydrofoilCore : public vcml::processor {
     virtual ~PydrofoilCore();
 
     void* cpu;
+    vcml::property<bool> simulate_atomics;
+    vcml::property<bool> speedup_wfi;
     vcml::property<bool> invalidate_all_regs;
     vcml::property<bool> log_to_file;
     bool use_dmi;

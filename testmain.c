@@ -90,7 +90,7 @@ int main(int argc, char *argv[]) {
     struct mem mem;
     mem.first_block = NULL;
     int res = pydrofoil_cpu_set_ram_read_write_callback(cpu, read_mem, write_mem, &mem);
-    pydrofoil_cpu_simulate(cpu, steps);
+    pydrofoil_cpu_simulate_no_wfi_no_atomics(cpu, steps);
     uint64_t cycles = pydrofoil_cpu_cycles(cpu);
     printf("Simulation completed. Total cycles: %llu\n", (unsigned long long)cycles);
     printf("reset\n");
@@ -104,7 +104,7 @@ int main(int argc, char *argv[]) {
         printf("setting pc failed\n");
         return -1;
     }
-    pydrofoil_cpu_simulate(cpu, steps);
+    pydrofoil_cpu_simulate_no_wfi_no_atomics(cpu, steps);
     cycles = pydrofoil_cpu_cycles(cpu);
     printf("Simulation completed. Total cycles: %llu\n", (unsigned long long)cycles);
     uint64_t pc = pydrofoil_cpu_pc(cpu);

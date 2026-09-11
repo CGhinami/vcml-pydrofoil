@@ -353,12 +353,11 @@ def pydrofoil_cpu_set_atomic_callback(i, atomic_cb, payload):
     return 0
 
 @ffi.def_extern()
-def pydrofoil_cpu_simulate(i, steps):
+def pydrofoil_cpu_simulate_wfi_atomics(i, steps):
     cpu = ffi.from_handle(i)
     cpu.steps = 0
 
     for _ in range(steps):
-        # Zephyr PC auslesen und in Int konvertieren
         pc_val = int(cpu.cpu.read_register('pc'))
 
         # 1. Breakpoint-Check
@@ -378,6 +377,66 @@ def pydrofoil_cpu_simulate(i, steps):
 
         cpu.step()
 
+    return cpu.steps
+
+@ffi.def_extern()
+def pydrofoil_cpu_simulate_no_wfi_atomics(i, steps):
+    cpu = ffi.from_handle(i)
+    cpu.steps = 0
+
+    for _ in range(steps):
+        pc_val = int(cpu.cpu.read_register('pc'))
+
+        # 1. Breakpoint-Check
+        if cpu.breakpoints and pc_val in cpu.breakpoints:
+            return cpu.steps 
+
+        # 2. Fetch the insn once: WFI fast-forward and A-extension intercept
+        insn = _fetch_insn(cpu, pc_val)
+        if insn is not None:
+            if _emulate_atomic(cpu, pc_val, insn):
+                continue
+
+        cpu.step()
+    return cpu.steps
+
+@ffi.def_extern()
+def pydrofoil_cpu_simulate_wfi_no_atomics(i, steps):
+    cpu = ffi.from_handle(i)
+    cpu.steps = 0
+
+    for _ in range(steps):
+        pc_val = int(cpu.cpu.read_register('pc'))
+
+        # 1. Breakpoint-Check
+        if cpu.breakpoints and pc_val in cpu.breakpoints:
+            return cpu.steps 
+
+        # 2. Fetch the insn once: WFI fast-forward and A-extension intercept
+        insn = _fetch_insn(cpu, pc_val)
+        if insn is not None:
+            if insn == 0x10500073:  # RISC-V 'wfi' Opcode
+                mip = int(cpu.cpu.read_register('mip'))
+                mie = int(cpu.cpu.read_register('mie'))
+                if (mip & mie) == 0:
+                    return steps
+        cpu.step()
+    return cpu.steps
+
+@ffi.def_extern()
+def pydrofoil_cpu_simulate_no_wfi_no_atomics(i, steps):
+    cpu = ffi.from_handle(i)
+    cpu.steps = 0
+
+    for _ in range(steps):
+
+        if cpu.breakpoints: # Only if the breakpoint list is not empty, read the pc
+            pc_val = cpu.cpu.read_register('pc')
+
+            if pc_val in cpu.breakpoints: # Check if the pc is in the list
+                return cpu.steps # return if it is
+
+        cpu.step()
     return cpu.steps
 
 @ffi.def_extern()

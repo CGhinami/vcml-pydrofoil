@@ -27,7 +27,9 @@ PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name, uint64_t hart_
     step(true), // For the first execution we want just 1 instruction to run
     stop_worker(false),
     log_to_file("log_to_file", false),
+    simulate_atomics("simulate_atomics", true),
     invalidate_all_regs("invalidate_all_regs", false),
+    speedup_wfi("speedup_wfi", false),
     core_arch(arch_name.c_str(), arch_name == "rv64" ? 64 : 32, architecture::regdb_riscv, 33), m_hart_id(hart_id)
 {
     
@@ -41,8 +43,7 @@ PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name, uint64_t hart_
     std::string isolated_dir = "/tmp/isolated_libs";
     std::filesystem::create_directories(isolated_dir);
 
-    std::string inst_lib = isolated_dir + "/libpydrofoil_hart" + std::to_string(hart_id) + "_pid" +
-                           std::to_string(getpid()) + ".so";
+    std::string inst_lib = isolated_dir + "/libpydrofoil_hart" + std::to_string(hart_id) + "_pid" + std::to_string(getpid()) + ".so";
 
     try {
         std::filesystem::copy_file(base_lib, inst_lib, std::filesystem::copy_options::overwrite_existing);
@@ -53,41 +54,48 @@ PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name, uint64_t hart_
     m_pydrofoil_handle = dlmopen(LM_ID_NEWLM, inst_lib.c_str(), RTLD_NOW | RTLD_LOCAL);
     VCML_ERROR_ON(!m_pydrofoil_handle, "Could not open unique Pydrofoil library '%s': %s", inst_lib.c_str(), dlerror());
 
-    // --- 2. MAP THE FUNCTION POINTERS ---
+    // map function pointers
     m_pydrofoil_set_hartid = (int (*)(void*, uint64_t)) dlsym(m_pydrofoil_handle, "pydrofoil_set_hartid");
-    m_pydrofoil_allocate_cpu = (void* (*) (const char*, const char*) ) dlsym(m_pydrofoil_handle,
-                                                                             "pydrofoil_allocate_cpu");
-    m_pydrofoil_cpu_set_ram_read_write_callback = (int (*)(
-        void*, int (*)(void*, uint64_t, int, void*, void*), int (*)(void*, uint64_t, int, uint64_t, void*),
-        void*)) dlsym(m_pydrofoil_handle, "pydrofoil_cpu_set_ram_read_write_callback");
-    m_pydrofoil_cpu_set_ram_read_write_callback_inv = (int (*)(
-        void*, int (*)(void*, uint64_t, int, void*, void*), int (*)(void*, uint64_t, int, uint64_t, void*), void*,
-        void (*)(uint64_t))) dlsym(m_pydrofoil_handle, "pydrofoil_cpu_set_ram_read_write_callback_inv");
+    m_pydrofoil_allocate_cpu = (void* (*) (const char*, const char*) ) dlsym(m_pydrofoil_handle, "pydrofoil_allocate_cpu");
+    m_pydrofoil_cpu_set_ram_read_write_callback = (int (*)(void*, int (*)(void*, uint64_t, int, void*, void*), int (*)(void*, uint64_t, int, uint64_t, void*), void*)) dlsym(m_pydrofoil_handle, "pydrofoil_cpu_set_ram_read_write_callback");
+    m_pydrofoil_cpu_set_ram_read_write_callback_inv = (int (*)(void*, int (*)(void*, uint64_t, int, void*, void*), int (*)(void*, uint64_t, int, uint64_t, void*), void*, void (*)(uint64_t))) dlsym(m_pydrofoil_handle, "pydrofoil_cpu_set_ram_read_write_callback_inv");
     m_pydrofoil_cpu_cycles = (uint64_t (*)(void*)) dlsym(m_pydrofoil_handle, "pydrofoil_cpu_cycles");
-    m_pydrofoil_cpu_set_breakpoint = (int (*)(void*, uint64_t)) dlsym(m_pydrofoil_handle,
-                                                                      "pydrofoil_cpu_set_breakpoint");
-    m_pydrofoil_cpu_remove_breakpoint = (int (*)(void*, uint64_t)) dlsym(m_pydrofoil_handle,
-                                                                         "pydrofoil_cpu_remove_breakpoint");
-    m_pydrofoil_cpu_simulate = (int (*)(void*, size_t)) dlsym(m_pydrofoil_handle, "pydrofoil_cpu_simulate");
-    m_pydrofoil_cpu_write_reg = (int (*)(void*, char const*, uint64_t)) dlsym(m_pydrofoil_handle,
-                                                                              "pydrofoil_cpu_write_reg");
+    m_pydrofoil_cpu_set_breakpoint = (int (*)(void*, uint64_t)) dlsym(m_pydrofoil_handle, "pydrofoil_cpu_set_breakpoint");
+    m_pydrofoil_cpu_remove_breakpoint = (int (*)(void*, uint64_t)) dlsym(m_pydrofoil_handle, "pydrofoil_cpu_remove_breakpoint");
+    m_pydrofoil_cpu_write_reg = (int (*)(void*, char const*, uint64_t)) dlsym(m_pydrofoil_handle, "pydrofoil_cpu_write_reg");
     m_pydrofoil_cpu_read_reg = (uint64_t (*)(void*, char const*)) dlsym(m_pydrofoil_handle, "pydrofoil_cpu_read_reg");
     m_pydrofoil_free_cpu = (int (*)(void*)) dlsym(m_pydrofoil_handle, "pydrofoil_free_cpu");
     m_pydrofoil_cpu_set_verbosity = (int (*)(void*, int)) dlsym(m_pydrofoil_handle, "pydrofoil_cpu_set_verbosity");
-    m_pydrofoil_cpu_set_dma_region = (int (*)(void*, uint64_t, uint64_t, uint8_t*)) dlsym(
-        m_pydrofoil_handle, "pydrofoil_cpu_set_dma_region");
-    m_pydrofoil_set_interrupt_pending = (int (*)(void*, uint32_t)) dlsym(m_pydrofoil_handle,
-                                                                         "pydrofoil_set_interrupt_pending");
-    m_pydrofoil_cpu_set_atomic_callback = (int (*)(
-        void*, int (*)(void*, uint32_t, uint64_t, uint64_t, uint64_t*, void*),
-        void*)) dlsym(m_pydrofoil_handle, "pydrofoil_cpu_set_atomic_callback");
-
+    m_pydrofoil_cpu_set_dma_region = (int (*)(void*, uint64_t, uint64_t, uint8_t*)) dlsym(m_pydrofoil_handle, "pydrofoil_cpu_set_dma_region");
+    m_pydrofoil_set_interrupt_pending = (int (*)(void*, uint32_t)) dlsym(m_pydrofoil_handle, "pydrofoil_set_interrupt_pending");
+    
+    
+    // handle atomics
+    m_pydrofoil_cpu_set_atomic_callback = (int (*)(void*, int (*)(void*, uint32_t, uint64_t, uint64_t, uint64_t*, void*), void*)) dlsym(m_pydrofoil_handle, "pydrofoil_cpu_set_atomic_callback");
+    if(!m_pydrofoil_cpu_set_atomic_callback) {
+        mwr::log_warn("Hart %lu: pydrofoil_cpu_set_atomic_callback missing, cross-hart atomics are NOT emulated", hart_id);
+    }
+    
+    if (simulate_atomics) {
+        if (speedup_wfi) {
+            m_pydrofoil_cpu_simulate = (int (*)(void*, size_t)) dlsym(m_pydrofoil_handle, "pydrofoil_cpu_simulate_wfi_atomics");
+        }
+        else {
+            m_pydrofoil_cpu_simulate = (int (*)(void*, size_t)) dlsym(m_pydrofoil_handle, "pydrofoil_cpu_simulate_no_wfi_atomics");
+        }
+    }
+    else {
+        if (speedup_wfi) {
+            m_pydrofoil_cpu_simulate = (int (*)(void*, size_t)) dlsym(m_pydrofoil_handle, "pydrofoil_cpu_simulate_wfi_no_atomics");
+        }
+        else {
+            m_pydrofoil_cpu_simulate = (int (*)(void*, size_t)) dlsym(m_pydrofoil_handle, "pydrofoil_cpu_simulate_no_wfi_no_atomics");
+        }
+    }
+    // whenever simulate_atomics=false -> please make sure to also set invalidate_all_regs = false; otherwise the beaviour is undefined 
+    
     VCML_ERROR_ON(!m_pydrofoil_allocate_cpu, "Could not load symbol: %s", dlerror());
 
-    if(!m_pydrofoil_cpu_set_atomic_callback) {
-        mwr::log_warn("Hart %lu: pydrofoil_cpu_set_atomic_callback missing, cross-hart atomics are NOT emulated",
-                      hart_id);
-    }
 
     set_little_endian(); // Otherwise the gdbserver inverts the bytes it reads
 
@@ -97,7 +105,6 @@ PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name, uint64_t hart_
     task.py_funct = backend::Funct::Init;
     task.arg = arch_name;
     std::future<uint64_t> done = task.result.get_future();
-
     {
         std::lock_guard lock(task_mutex);
         task_queue.push(std::move(task));
@@ -111,10 +118,11 @@ PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name, uint64_t hart_
         define_cpureg_rw(i, core_arch.get_regs_ptr()[i].gdb_name, core_arch.word_size());
 
     // print core settings:
-    // mwr.log_info("hartid: %d",)
     std::cout<< "hartid:   " << m_hart_id << std::endl << 
                 "async:    " << async << std::endl <<
                 "async_rate:    " << async_rate << std::endl <<
+                "simulate_atomics:  " << simulate_atomics << std::endl << 
+                "speedup_wfi    " << speedup_wfi << std::endl << 
                 "inval_regs: " << invalidate_all_regs << std::endl <<
                 "elf_path:   " << elf << std::endl;
 }
@@ -634,17 +642,20 @@ void PydrofoilCore::end_of_elaboration()
     done.get();           // Wait for the result
 
     // Has to follow SetCb: registering the ram callbacks resets the cpu object.
-    backend::PythonTask atomic_task;
-    atomic_task.py_funct = backend::Funct::SetAtomicCb;
-    std::future<uint64_t> atomic_done = atomic_task.result.get_future();
+    
+    if (simulate_atomics) {
+        backend::PythonTask atomic_task;
+        atomic_task.py_funct = backend::Funct::SetAtomicCb;
+        std::future<uint64_t> atomic_done = atomic_task.result.get_future();
 
-    {
-        std::lock_guard lock(task_mutex);
-        task_queue.push(std::move(atomic_task));
+        {
+            std::lock_guard lock(task_mutex);
+            task_queue.push(std::move(atomic_task));
+        }
+        task_cv.notify_one();
+        if(atomic_done.get() != 0)
+            mwr::log_warn("Hart %lu: registering the atomic callback failed", m_hart_id);
     }
-    task_cv.notify_one();
-    if(atomic_done.get() != 0)
-        mwr::log_warn("Hart %lu: registering the atomic callback failed", m_hart_id);
 }
 
 FileLogger::FileLogger(const std::string& log_path) : m_log_path(log_path) // FIXED: log_path
