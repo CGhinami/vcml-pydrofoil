@@ -1,0 +1,73 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+import itertools
+
+# ==========================================
+# 1. MOCK DATA GENERIEREN (Für den Testlauf)
+# ==========================================
+# Wir generieren die Matrix dynamisch, anstatt einen riesigen String zu nutzen.
+n_cores_list = [1, 2, 4, 8]
+quantum_list = ['1us', '100us', '1ms']
+async_rate_list = [0, 1, 5, 10]
+iterations = [1, 2, 3, 4, 5]
+
+mock_data = []
+for c, q, a, i in itertools.product(n_cores_list, quantum_list, async_rate_list, iterations):
+    # Simuliere halbwegs realistische Runtimes (wird schneller mit mehr Cores, leichtes Rauschen)
+    base = 20.0 / c
+    if q == '1us': base *= 1.2
+    elif q == '1ms': base *= 0.9
+    base -= (a * 0.05)
+    
+    # Füge etwas Zufall hinzu (für die Fehlerbalken der 5 Iterationen)
+    runtime = base + np.random.uniform(-0.3, 0.3)
+    mock_data.append([i, c, q, a, runtime])
+
+df = pd.DataFrame(mock_data, columns=['iteration', 'n_cores', 'quantum', 'async_rate', 'runtime'])
+
+# ==========================================
+# 2. ECHTE DATEN LADEN (Später auskommentieren)
+# ==========================================
+# Sobald du echte Daten hast, lösche den Block 1 oben und nutze nur diese Zeile:
+# df = pd.read_csv("benchmark_results.csv")
+
+# ==========================================
+# 3. PLOTTEN
+# ==========================================
+sns.set_theme(style="whitegrid")
+plt.figure(figsize=(12, 7))
+
+# Lineplot zeichnen
+# hue='quantum': Jedes Quantum bekommt eine eigene Farbe
+# style='async_rate': Jede Async-Rate bekommt ein eigenes Symbol (Kreis, Kreuz, Viereck...)
+# err_style='bars': Zeichnet die Abweichungen der 5 Iterationen als Fehlerbalken
+ax = sns.lineplot(
+    data=df,
+    x='n_cores',
+    y='runtime',
+    hue='quantum',
+    style='async_rate',
+    markers=True,       # Symbole an den Datenpunkten einblenden
+    dashes=False,       # Alle Linien durchgezogen (statt gestrichelt) zeichnen
+    err_style='bars',   # Fehlerbalken (Standardabweichung) anzeigen
+    err_kws={'capsize': 4}, # Kleine horizontale Striche an den Fehlerbalken
+    markersize=8,
+    linewidth=2
+)
+
+# X-Achse zwingen, genau 1, 2, 4 und 8 anzuzeigen (ohne krumme Zwischenwerte wie 3 oder 6)
+plt.xticks([1, 2, 4, 8])
+
+# Titel und Achsenbeschriftungen
+plt.title('Benchmark Runtime: Core Scaling vs. Quantum & Async Rate (5 Runs Average)', fontsize=14, pad=15)
+plt.xlabel('Anzahl Cores (n_cores)', fontsize=12)
+plt.ylabel('Runtime (Sekunden)', fontsize=12)
+
+# Legende nach außen verschieben, damit sie die Linien nicht verdeckt
+plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+
+plt.tight_layout()
+plt.savefig('benchmark_matrix_plot.png', dpi=300, bbox_inches='tight')
+plt.show()

@@ -352,6 +352,8 @@ def pydrofoil_cpu_set_atomic_callback(i, atomic_cb, payload):
     cpu.atomic_payload = payload
     return 0
 
+
+#pydrofoil_cpu_simulate_wfi_atomics is an option in the config but should not be used
 @ffi.def_extern()
 def pydrofoil_cpu_simulate_wfi_atomics(i, steps):
     cpu = ffi.from_handle(i)
@@ -379,6 +381,12 @@ def pydrofoil_cpu_simulate_wfi_atomics(i, steps):
 
     return cpu.steps
 
+# pydrofoil_cpu_simulate_no_wfi_atomics is to be used
+# when async=True
+# For this:
+# system.core${i}.speedup_wfi = false
+# system.core${i}.invalidate_all_regs = true 
+# system.core${i}.simulate_atomics = true
 @ffi.def_extern()
 def pydrofoil_cpu_simulate_no_wfi_atomics(i, steps):
     cpu = ffi.from_handle(i)
@@ -399,7 +407,7 @@ def pydrofoil_cpu_simulate_no_wfi_atomics(i, steps):
 
         cpu.step()
     return cpu.steps
-
+#pydrofoil_cpu_simulate_wfi_no_atomics is an option in the config but should not be used   
 @ffi.def_extern()
 def pydrofoil_cpu_simulate_wfi_no_atomics(i, steps):
     cpu = ffi.from_handle(i)
@@ -424,6 +432,12 @@ def pydrofoil_cpu_simulate_wfi_no_atomics(i, steps):
     return cpu.steps
 
 @ffi.def_extern()
+# pydrofoil_cpu_simulate_no_wfi_no_atomics is to be used
+# when async=False
+# For this:
+# system.core${i}.speedup_wfi = false
+# system.core${i}.invalidate_all_regs = false 
+# system.core${i}.simulate_atomics = false
 def pydrofoil_cpu_simulate_no_wfi_no_atomics(i, steps):
     cpu = ffi.from_handle(i)
     cpu.steps = 0
@@ -435,7 +449,12 @@ def pydrofoil_cpu_simulate_no_wfi_no_atomics(i, steps):
 
             if pc_val in cpu.breakpoints: # Check if the pc is in the list
                 return cpu.steps # return if it is
-
+        if 0:
+            mstatus_val = int(cpu.cpu.lowlevel.read_CSR(0x300))
+            mie_val = int(cpu.cpu.lowlevel.read_CSR(0x304))
+            mip_val = int(cpu.cpu.lowlevel.read_CSR(0x344))
+            pc_current = int(cpu.cpu.read_register('pc'))
+            print(f"[SIM DEBUG] PC: {hex(pc_current)} | mstatus: {hex(mstatus_val)} | mie: {hex(mie_val)} | mip: {hex(mip_val)}")
         cpu.step()
     return cpu.steps
 
@@ -458,9 +477,6 @@ def pydrofoil_cpu_read_reg(i, name):
 def pydrofoil_set_interrupt_pending(i, value):
     cpu = ffi.from_handle(i)
     bit_size = 64 if cpu.rv64 else 32
-
-    # value encodes the mip bit index in bits 0..7 and the assert/deassert
-    # flag in bit 8, so clearing MTIP/MEIP no longer wipes MSIP.
     value = int(value)
     bit = value & 0xff
     set_bit = (value & 0x100) != 0
@@ -469,6 +485,7 @@ def pydrofoil_set_interrupt_pending(i, value):
     current_mip = int(cpu.cpu.read_register('mip'))
 
     if set_bit:
+        print("set bit")
         new_mip = current_mip | (1 << bit)
     else:
         new_mip = current_mip & ~(1 << bit)
@@ -476,14 +493,18 @@ def pydrofoil_set_interrupt_pending(i, value):
     cpu.cpu.write_register('mip', _pydrofoil.bitvector(bit_size, new_mip))
 
     # Read CSRs for debug
-    mstatus = cpu.cpu.lowlevel.read_CSR(0x300)
-    mie = cpu.cpu.lowlevel.read_CSR(0x304)
-    mip = cpu.cpu.lowlevel.read_CSR(0x344)
+    if 0:
+        print(f"DEBUG [pydrofoil]: irq_bit={bit} action={'SET' if set_bit else 'CLEAR'}")
+        mstatus = cpu.cpu.lowlevel.read_CSR(0x300)
+        mie = cpu.cpu.lowlevel.read_CSR(0x304)
+        mip = cpu.cpu.lowlevel.read_CSR(0x344)
     
-    # Use an f-string for atomic printing to prevent thread interleaving
-    # print(f"mip bit {bit} {'set' if set_bit else 'clear'}, mstatus, mie, mip: "
-    #       f"{hex(mstatus)} {hex(mie)} {hex(mip)}")
-    
+        print("\n--- MIP UPDATE ---")
+        print(f"Action     : {'SET' if set_bit else 'CLEAR'} Bit {bit}")
+        print(f"current_mip: {hex(current_mip)} (bin: {bin(current_mip)})")
+        print(f"new_mip    : {hex(new_mip)} (bin: {bin(new_mip)})")
+        print("------------------\n")
+
     return 0
 
 @ffi.def_extern()

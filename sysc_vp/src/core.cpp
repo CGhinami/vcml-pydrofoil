@@ -32,7 +32,6 @@ PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name, uint64_t hart_
     speedup_wfi("speedup_wfi", false),
     core_arch(arch_name.c_str(), arch_name == "rv64" ? 64 : 32, architecture::regdb_riscv, 33), m_hart_id(hart_id)
 {
-    
     if (log_to_file) {
         std::string path = "logs/core" + std::to_string(hart_id) + "_debug.txt";
         logger = new FileLogger(path);
@@ -208,8 +207,8 @@ void PydrofoilCore::notify_pending_irq(size_t irq, bool set)
     task.py_funct = backend::Funct::SetMIP;
     task.arg = encoded;
     std::future<uint64_t> done = task.result.get_future();
-    //  CORE_LOG("Hart " << m_hart_id << " | irq " << irq << " -> mip bit " << bit << (set ? " set" : " clear")
-    //                   << " pushed to task queue");
+     CORE_LOG("Hart " << m_hart_id << " | irq " << irq << " -> mip bit " << bit << (set ? " set" : " clear")
+                      << " pushed to task queue");
 
     {
         std::lock_guard lock(task_mutex);
@@ -217,8 +216,8 @@ void PydrofoilCore::notify_pending_irq(size_t irq, bool set)
     }
     task_cv.notify_one();
     done.get();
-    //  CORE_LOG("Hart " << m_hart_id << " | irq " << irq << " -> mip bit " << bit << (set ? " set" : " clear")
-    //                   << " completed");
+     CORE_LOG("Hart " << m_hart_id << " | irq " << irq << " -> mip bit " << bit << (set ? " set" : " clear")
+                      << " completed");
 }
 
 // Called from the SystemC side while the python worker may be running
@@ -325,7 +324,6 @@ void PydrofoilCore::sc_sync_catch_ex(std::function<void(void)> job)
 // Called from a coroutine
 void PydrofoilCore::simulate(size_t cycles)
 {
-    // CORE_LOG("test " << cycles << "\n");
     std::queue<std::pair<size_t, bool>> pending_irqs;
     {
         std::lock_guard<std::mutex> lock(irq_mutex);
@@ -353,7 +351,6 @@ void PydrofoilCore::simulate(size_t cycles)
     }
 
     task_cv.notify_one(); // notify the waiting thread
-                          //  CORE_LOG("Hart " << m_hart_id << "start: PydrofoilCore::simulate");
     while(1) {
         MemAccess memtask;
 
@@ -366,10 +363,8 @@ void PydrofoilCore::simulate(size_t cycles)
                 memtask = std::move(memtask_queue.front());
                 memtask_queue.pop();
             } else if(sim_done_flag) {
-                //  CORE_LOG("Hart " << m_hart_id << " | Breaking out of memtask loop because sim task is ready");
                 break;
             } else {
-                //  CORE_LOG("Hart " << m_hart_id << " | DANGER ELSE CONDITION");
                 continue;
             }
         }
@@ -415,71 +410,8 @@ void PydrofoilCore::simulate(size_t cycles)
     n_cycles += current_steps;
     check_for_dmi_regions();
     step = false;
-    //  CORE_LOG("Hart " << m_hart_id << " | end: PydrofoilCore::simulate");
 }
 
-// void PydrofoilCore::simulate(size_t cycles)
-// {
-//     if(is_irq_pending.has_value()) {
-//         notify_pending_irq(is_irq_pending.value());
-//         is_irq_pending.reset();
-//     }
-
-//     backend::PythonTask task;
-//     task.py_funct = backend::Funct::Simulate;
-//     task.arg = step ? 1 : cycles;
-//     std::future<uint64_t> done = task.result.get_future();
-
-//     {
-//         std::lock_guard lock(task_mutex);
-//         task_queue.push(std::move(task));
-//     }
-//     std::cout << "DEBUG: C++ simulate() called on core with hart id " << m_hart_id << std::endl;
-//     task_cv.notify_one(); // notify the waiting thread
-
-//     while(done.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
-//         MemAccess memtask;
-
-//         {
-//             std::unique_lock<std::mutex> lock(memtask_mutex);
-//             memtask_cv.wait(lock, [&]
-//                             { return !memtask_queue.empty() ||
-//                                      (done.wait_for(std::chrono::seconds(0)) == std::future_status::ready); });
-
-//             if (!memtask_queue.empty())
-//             {
-//                 memtask = std::move(memtask_queue.front());
-//                 memtask_queue.pop();
-//             }
-//             else
-//                 continue;
-//         }
-
-//         bool success = false;
-//         if(memtask.type == MemTask::Read) {
-//             success = (data.read(memtask.addr, memtask.dest, memtask.size, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE);
-//             // memset(memtask.dest,0x297,8); // To be removed once the 0x1000 initial accesses are fixed
-//             std::cout << "handling memtask for hart" << m_hart_id << std::endl;
-//         } else {
-//             success = (data.write(memtask.addr, &memtask.value, memtask.size, vcml::SBI_NONE) ==
-//             tlm::TLM_OK_RESPONSE); std::cout << "handling memtask for hart" << m_hart_id << std::endl;
-//         }
-//         if (!success)
-//             mwr::log_info("Memory access failed with address: %lx", memtask.addr);
-
-//         memtask.result.set_value(success);
-//     }
-
-//     size_t current_steps = done.get();
-//     bool brkpt_hit = current_steps > 0 && current_steps < cycles;
-
-//     if(!step && brkpt_hit)
-//         handle_breakpoint_hit();
-
-//     n_cycles += current_steps;
-//     check_for_dmi_regions();
-//     step = false;
-// }
 
 void PydrofoilCore::handle_breakpoint_hit()
 {
@@ -533,6 +465,7 @@ void PydrofoilCore::reset()
 {
     // 1. Run the standard VCML reset (clears PC, registers, etc.)
     vcml::processor::reset();
+
 
     // 2. Force the Hart ID again
     // This ensures that even if the Python object was recreated,

@@ -9,14 +9,11 @@
 
 #include "memory_callbacks.h"
 #include "core.h"
-#include <cstring> // for memset
+#include <cstring> 
 #include <iostream>
 #include <mutex>
 #include <unordered_map>
 
-// Serialises every atomic of every hart against every other one. All harts call
-// into this single VP binary, so unlike a lock inside the per-hart .so copies
-// this one is actually shared.
 std::mutex g_amo_mutex;
 
 struct Reservation {
@@ -24,7 +21,6 @@ struct Reservation {
     uint64_t addr;
 };
 
-// Keyed by hart id, guarded by g_amo_mutex.
 std::unordered_map<uint64_t, Reservation> g_reservations;
 
 void invalidate_reservations(uint64_t word_addr)
@@ -45,14 +41,13 @@ void invalidate_reservations_cb(uint64_t word_addr)
     // std::cout << "Invalidated reservations for word address: 0x" << std::hex << word_addr << std::dec << std::endl;
 }
 
-// C++ member functions cannot be used as callbacks, we need to define C-style functions
-// (not member of the class), but they still need to get access to the class fields
-// so we misuse the payload pointer to pass this as argument
+// this is used when writes should not be invalidated (async=false) 
 int write_mem(void* cpu, uint64_t address, int size, uint64_t value, void* payload)
 {
     auto core = reinterpret_cast<core::PydrofoilCore*>(payload);
 
-    // std::cout << "[REQUEST] Hart " << core->m_hart_id << " | WRITE to addr: 0x" << std::hex << address
+    // std::cout << "[REQUEST] Hart " << core->m_hart_id 
+    //           << " | WRITE to addr: 0x" << std::hex << address
     //           << " | size: " << std::dec << size << " bytes"
     //           << " | value: 0x" << std::hex << value << std::dec << std::endl;
 
@@ -74,7 +69,8 @@ int write_mem(void* cpu, uint64_t address, int size, uint64_t value, void* paylo
     bool success = res.get();
 
     if(!success) {
-        std::cout << "[SUCCEEDED] Hart " << core->m_hart_id << " | WRITE to addr: 0x" << std::hex << address << std::dec
+        std::cout << "[SUCCEEDED] Hart " << core->m_hart_id 
+                  << " | WRITE to addr: 0x" << std::hex << address << std::dec
                   << " | status: " << (success ? "OK" : "FAILED") << std::endl;
     }
 
@@ -87,7 +83,8 @@ int write_mem_inv(void* cpu, uint64_t address, int size, uint64_t value, void* p
 
     auto core = reinterpret_cast<core::PydrofoilCore*>(payload);
 
-    // std::cout << "[REQUEST] Hart " << core->m_hart_id << " | WRITE to addr: 0x" << std::hex << address
+    // std::cout << "[REQUEST] Hart " << core->m_hart_id 
+    //           << " | WRITE to addr: 0x" << std::hex << address
     //           << " | size: " << std::dec << size << " bytes"
     //           << " | value: 0x" << std::hex << value << std::dec << std::endl;
 
@@ -109,20 +106,22 @@ int write_mem_inv(void* cpu, uint64_t address, int size, uint64_t value, void* p
     bool success = res.get();
 
     if(!success) {
-        std::cout << "[SUCCEEDED] Hart " << core->m_hart_id << " | WRITE to addr: 0x" << std::hex << address << std::dec
+        std::cout << "[SUCCEEDED] Hart " << core->m_hart_id 
+                  << " | WRITE to addr: 0x" << std::hex << address << std::dec
                   << " | status: " << (success ? "OK" : "FAILED") << std::endl;
     }
 
     return success ? 0 : 1;
 }
 
-// The debug leads to a debug transaction avoid timig annotation --> no wait --> we dont have to be in a sc_thread
 int read_mem(void* cpu, uint64_t address, int size, void* destination, void* payload)
 {
     auto core = reinterpret_cast<core::PydrofoilCore*>(payload);
 
-    // std::cout << "[REQUEST] Hart " << core->m_hart_id << " | READ from addr: 0x" << std::hex << address
-    //           << " | size: " << std::dec << size << " bytes" << std::endl;
+    // std::cout << "[REQUEST] Hart " << core->m_hart_id 
+    //           << " | READ from addr: 0x" << std::hex << address
+    //           << " | size: " << std::dec << size 
+    //           << " bytes" << std::endl;
 
     core::PydrofoilCore::MemAccess memtask;
 
@@ -142,8 +141,9 @@ int read_mem(void* cpu, uint64_t address, int size, void* destination, void* pay
     bool success = res.get();
 
     if(!success) {
-        std::cout << "[SUCCEEDED] Hart " << core->m_hart_id << " | READ from addr: 0x" << std::hex << address
-                  << std::dec << " | status: " << (success ? "OK" : "FAILED") << std::endl;
+        std::cout << "[SUCCEEDED] Hart " << core->m_hart_id 
+                  << " | READ from addr: 0x" << std::hex << address << std::dec 
+                  << " | status: " << (success ? "OK" : "FAILED") << std::endl;
     }
 
     return success ? 0 : 1;
@@ -168,8 +168,6 @@ enum : uint32_t {
     FUNCT5_AMOMAXU = 0x1c
 };
 
-// RAM is handed to us as DMI, so an atomic normally needs no bus transaction at
-// all. mem_regions only ever grows and is filled during the first quanta.
 uint32_t* dmi_word_ptr(core::PydrofoilCore* core, uint64_t addr)
 {
     for(const auto& entry : core->mem_regions) {
@@ -281,8 +279,6 @@ int atomic_mem(void* cpu, uint32_t insn, uint64_t address, uint64_t src, uint64_
             *result = 1;
         }
 
-        // A store-conditional always ends the issuing hart's reservation, no
-        // matter whether it succeeded.
         g_reservations[core->m_hart_id] = Reservation{false, 0};
         return 0;
     }
