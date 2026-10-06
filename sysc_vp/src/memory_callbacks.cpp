@@ -10,12 +10,19 @@
 #include "memory_callbacks.h"
 #include "core.h"
 #include <cstring> // for memset
+#include <atomic>
+#include <cstdio>
+
+// TEMP DEBUG INSTRUMENTATION -- counts slow-path (non-DMI) memory callbacks.
+std::atomic<uint64_t> g_slowpath_write_count{0};
+std::atomic<uint64_t> g_slowpath_read_count{0};
 
 // C++ member functions cannot be used as callbacks, we need to define C-style functions
 // (not member of the class), but they still need to get access to the class fields
 // so we misuse the payload pointer to pass this as argument
 int write_mem(void* cpu, uint64_t address, int size, uint64_t value, void* payload)
 {
+    g_slowpath_write_count.fetch_add(1, std::memory_order_relaxed);
     auto core = reinterpret_cast<core::PydrofoilCore*>(payload);
 
     core::PydrofoilCore::MemAccess memtask;
@@ -25,20 +32,19 @@ int write_mem(void* cpu, uint64_t address, int size, uint64_t value, void* paylo
     memtask.size = size;
     memtask.value = value;
 
-    std::future<bool> res = memtask.result.get_future();
+    // Nothing else for the worker thread to do while this is in flight, so
+    // the plain blocking submit() (post + spin-wait) is fine here -- the
+    // multiplexed post()/is_done() split is only needed on the other side,
+    // in PydrofoilCore::simulate(), which has to watch two mailboxes at once.
+    core->memtask_mailbox.submit(memtask);
 
-    {
-        std::lock_guard lock(core->memtask_mutex);
-        core->memtask_queue.push(std::move(memtask));
-    }
-    core->memtask_cv.notify_one();
-
-    return res.get() ? 0 : 1;
+    return memtask.success ? 0 : 1;
 }
 
 // The debug leads to a debug transaction avoid timig annotation --> no wait --> we dont have to be in a sc_thread
 int read_mem(void* cpu, uint64_t address, int size, void* destination, void* payload)
 {
+    g_slowpath_read_count.fetch_add(1, std::memory_order_relaxed);
     auto core = reinterpret_cast<core::PydrofoilCore*>(payload);
 
     core::PydrofoilCore::MemAccess memtask;
@@ -48,13 +54,7 @@ int read_mem(void* cpu, uint64_t address, int size, void* destination, void* pay
     memtask.size = size;
     memtask.dest = destination;
 
-    std::future<bool> res = memtask.result.get_future();
+    core->memtask_mailbox.submit(memtask);
 
-    {
-        std::lock_guard lock(core->memtask_mutex);
-        core->memtask_queue.push(std::move(memtask));
-    }
-    core->memtask_cv.notify_one();
-
-    return res.get() ? 0 : 1;
+    return memtask.success ? 0 : 1;
 }

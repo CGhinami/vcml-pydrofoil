@@ -99,7 +99,7 @@ cd ~/vcml-pydrofoil
 ```
 
 *Note:*
-The simulator supports RTOS and bare-metal applications. Linux applications are still under test. The current simulator has only the UART peripheral connected, but the RISCV-compatible peripherals from [VCML](https://github.com/machineware-gmbh/vcml) are supported. To add them, modify the files where the peripherals are instantiated and connected ([system.cpp](sysc_vp/src/system.cpp) and [system.h](sysc_vp/include/system.h)).
+The simulator supports RTOS and bare-metal and Linux applications. The current simulator has only few peripherals connected, but the RISCV-compatible peripherals from [VCML](https://github.com/machineware-gmbh/vcml) are supported. To add them, modify the files where the peripherals are instantiated and connected ([system.cpp](sysc_vp/src/system.cpp) and [system.h](sysc_vp/include/system.h)).
 
 
 ## Profile the SystemC-TLM2.0

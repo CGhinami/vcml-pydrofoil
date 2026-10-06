@@ -1,6 +1,7 @@
 #include "pydrofoilcapi.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h> // Include for clock_gettime
 
 /*
  * Organised as a linked list of memory blocks

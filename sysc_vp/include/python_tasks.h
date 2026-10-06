@@ -10,9 +10,9 @@
 #pragma once
 #include <unordered_map>
 #include "memory_callbacks.h"
-#include <future>
 #include <variant>
 #include "profiling.h"
+#include <functional>
 
 extern "C" {
 #include "pydrofoilcapi.h"
@@ -31,7 +31,7 @@ struct WriteRegArgs {
 };
 
 // std::monostate allows us to have no argument (and still have a valid arg which will default to monostate)
-using TaskArg = std::variant<std::monostate, uint64_t, uint32_t, std::string, WriteRegArgs>;
+using TaskArg = std::variant<std::monostate, uint64_t, uint32_t, std::string, WriteRegArgs, uint64_t*>;
 // enum class: no implicit conversion, name's scoped to enum
 enum class Funct {
     Init,
@@ -43,15 +43,19 @@ enum class Funct {
     FreeCpu,
     SetVerbosity,
     SetDMI,
-    SetMIP,
+    SetIrqLines,
+    SetHtifTohost,
     SetBrkp,
-    RemoveBrkp
+    SetTickFreq,
+    SetExtClint,
+    RemoveBrkp,
+    GetExit
 };
 
 struct PythonTask {
     Funct py_funct;
     TaskArg arg;
-    std::promise<uint64_t> result; // Avoids the burden of sync threads
+    uint64_t result = 0; // written by the handler; valid once task_mailbox.submit() returns
 };
 
 auto create_handlers(core::PydrofoilCore& pycore) -> std::unordered_map<Funct, std::function<void(PythonTask&)>>;

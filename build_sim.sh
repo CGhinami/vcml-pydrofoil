@@ -19,6 +19,6 @@ cd build
 
 cmake ../sysc_vp \
     -DCMAKE_PREFIX_PATH="${SYSTEMC_HOME}" \
-    -DCMAKE_BUILD_TYPE=Debug
+    -DCMAKE_BUILD_TYPE=Release
 
 make -j"$(nproc)"

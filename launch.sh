@@ -51,5 +51,9 @@ if [[ "$DEBUG" == "1" ]]; then
 else
     echo "Running normally…"
     #"$VP_BINARY" --trace-stdout -f "$VP_CFG"
-    "$VP_BINARY" -f "$VP_CFG"
+    # VP_EXTRA: extra sysc_vp arguments, applied AFTER -f so they override
+    # the config file. Used to sweep the TLM global quantum without
+    # generating a config per benchmark per quantum:
+    #   VP_EXTRA="-c system.quantum=1ms" ./launch.sh <cfg>
+    "$VP_BINARY" -f "$VP_CFG" ${VP_EXTRA:-}
 fi

@@ -37,7 +37,16 @@ CFFI_DLLEXPORT int pydrofoil_cpu_remove_breakpoint(void* cpu, uint64_t addr);
 
 CFFI_DLLEXPORT int pydrofoil_cpu_set_pc(void* cpu, uint64_t value);
 CFFI_DLLEXPORT size_t pydrofoil_cpu_pc(void* cpu);
-CFFI_DLLEXPORT int pydrofoil_set_interrupt_pending(void* cpu, uint32_t value);
+CFFI_DLLEXPORT int pydrofoil_get_htif_done(void* cpu);
+
+// Relocate the HTIF tohost/fromhost window. The model intercepts exactly
+// tohost and tohost+4 *before* the memory callbacks, so the default
+// (0x80001000) silently swallows guest accesses to that address. 
+CFFI_DLLEXPORT int pydrofoil_cpu_set_htif_tohost(void* cpu, uint64_t tohost);
+CFFI_DLLEXPORT int pydrofoil_cpu_set_external_clint(void* cpu, int enable);
+
+CFFI_DLLEXPORT int pydrofoil_set_interrupt_lines(void* cpu, uint64_t* lines_ptr);
+CFFI_DLLEXPORT int pydrofoil_set_instructions_per_tick(void* cpu, uint64_t insns_per_tick);
 
 //
 

@@ -18,10 +18,13 @@ PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name):
     elf("elf", ""),
     arch_name("arch_name", "rv64"),
     verbosity("verbose", false),
+    htif_tohost("htif_tohost", 0),
+    mem_dump("mem_dump", ""),
     cpu(nullptr),
     use_dmi(true),
     n_cycles(0),
     step(true), // For the first execution we want just 1 instruction to run
+    insns_per_tick(0),
     stop_worker(false),
     core_arch(arch_name.c_str(), arch_name == "rv64" ? 64 : 32, architecture::regdb_riscv, 33)
 {
@@ -33,14 +36,7 @@ PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name):
     backend::PythonTask task;
     task.py_funct = backend::Funct::Init;
     task.arg = arch_name;
-    std::future<uint64_t> done = task.result.get_future();
-
-    {
-        std::lock_guard lock(task_mutex);
-        task_queue.push(std::move(task));
-    }
-    task_cv.notify_one(); // notify the waiting thread
-    done.get();           // Wait for the result
+    task_mailbox.submit(task); // blocks (spinning) until the worker thread has handled it
 
     set_verbosity(verbosity.get());
 
@@ -72,45 +68,41 @@ PydrofoilCore::~PydrofoilCore()
     if(cpu) {
         backend::PythonTask task;
         task.py_funct = backend::Funct::FreeCpu;
-        std::future<uint64_t> done = task.result.get_future();
 
-        {
-            std::lock_guard lock(task_mutex);
-            task_queue.push(std::move(task));
-            stop_worker = true;
-        }
-        task_cv.notify_one();
-        done.get();
+        // must be visible to the worker before it observes the FreeCpu
+        // request: sequenced-before task_mailbox.submit()'s internal post(),
+        // which release-publishes it, matching the acquire in the worker's
+        // take() -- see python_worker_loop().
+        stop_worker = true;
+        task_mailbox.submit(task);
     }
 
     python_worker_thread.join();
 }
 
-void PydrofoilCore::notify_pending_irq(bool set)
-{
-    uint32_t mip_val;
-    if(irq_num == MEIP)
-        mip_val = set ? (MEIP_BIT) : 0;
-    else if(irq_num == SEIP)
-        mip_val = set ? (SEIP_BIT) : 0;
+// void PydrofoilCore::notify_pending_irq(size_t irq, bool set)
+// {
+//     uint32_t bit = irq_to_mip_bit[irq];
 
-    backend::PythonTask task;
-    task.py_funct = backend::Funct::SetMIP;
-    task.arg = mip_val;
-    std::future<uint64_t> done = task.result.get_future();
-
-    {
-        std::lock_guard lock(task_mutex);
-        task_queue.push(std::move(task));
-    }
-    task_cv.notify_one(); // notify the waiting thread
-    done.get();           // Wait for the result
-}
+//     backend::PythonTask task;
+//     task.py_funct = backend::Funct::SetMIP;
+//     task.arg = backend::IrqArgs{ bit, set };
+//     task_mailbox.submit(task);
+// }
 
 void PydrofoilCore::interrupt(size_t irq, bool set)
 {
-    is_irq_pending = set;
-    irq_num = irq;
+    if(irq >= NIRQ_LINES)
+        return;
+
+    // Watch out, 1 by definition is a signed int
+    const uint64_t mask = uint64_t{1} << irq_to_mip_bit[irq];
+
+    // fetch or/and ensure atomic operations!
+    if(set)
+        irq_lines.fetch_or(mask, std::memory_order_release);
+    else
+        irq_lines.fetch_and(~mask, std::memory_order_release);
 }
 
 bool PydrofoilCore::write_reg_dbg(size_t regno, const void* buf, size_t len)
@@ -129,15 +121,8 @@ bool PydrofoilCore::write_reg_dbg(size_t regno, const void* buf, size_t len)
     std::memcpy(&reg_val, buf, len);
     task.arg = backend::WriteRegArgs{reg_name.c_str(), reg_val};
 
-    std::future<uint64_t> done = task.result.get_future();
-
-    {
-        std::lock_guard lock(task_mutex);
-        task_queue.push(std::move(task));
-    }
-    task_cv.notify_one(); // notify the waiting thread
-
-    return done.get(); // Wait for the result
+    task_mailbox.submit(task);
+    return task.result;
 }
 
 bool PydrofoilCore::read_reg_dbg(size_t regno, void* buf, size_t len)
@@ -155,15 +140,9 @@ bool PydrofoilCore::read_reg_dbg(size_t regno, void* buf, size_t len)
     backend::PythonTask task;
     task.py_funct = backend::Funct::ReadReg;
     task.arg = reg_name;
-    std::future<uint64_t> done = task.result.get_future();
+    task_mailbox.submit(task);
 
-    {
-        std::lock_guard lock(task_mutex);
-        task_queue.push(std::move(task));
-    }
-    task_cv.notify_one(); // notify the waiting thread
-
-    uint64_t reg_val = done.get();   // Wait for the result
+    uint64_t reg_val = task.result;
     std::memcpy(buf, &reg_val, len); // Truncates if sizeof reg_val > word_size (only works with little-endian!)
 
     return true;
@@ -178,18 +157,13 @@ void PydrofoilCore::check_for_dmi_regions()
             auto size = e - s + 1; // +1 to include the last byte
 
             mem_regions.emplace(s, MemRegion{dmi.get_dmi_ptr(), s, size});
+            mwr::log_info("DMI start: %lx, DMI end: %lx", s, e);
 
             backend::PythonTask task;
             task.py_funct = backend::Funct::SetDMI;
             task.arg = s;
-            std::future<uint64_t> done = task.result.get_future();
-
-            {
-                std::lock_guard lock(task_mutex);
-                task_queue.push(std::move(task));
-            }
-            task_cv.notify_one(); // notify the waiting thread
-            if(done.get() != 0)
+            task_mailbox.submit(task);
+            if(task.result != 0)
                 mwr::log_info("Setting DMI pointer failed");
         }
     }
@@ -198,61 +172,74 @@ void PydrofoilCore::check_for_dmi_regions()
 // Called from a coroutine
 void PydrofoilCore::simulate(size_t cycles)
 {
-    if(is_irq_pending.has_value()) {
-        notify_pending_irq(is_irq_pending.value());
-        is_irq_pending.reset();
-    }
+    // for(size_t irq = 0; irq < NIRQ_LINES; ++irq) {
+    //     if(pending_irq[irq].has_value()) {
+    //         notify_pending_irq(irq, pending_irq[irq].value());
+    //         pending_irq[irq].reset();
+    //     }
+    // }
 
     backend::PythonTask task;
     task.py_funct = backend::Funct::Simulate;
     task.arg = step ? 1 : cycles;
-    std::future<uint64_t> done = task.result.get_future();
 
-    {
-        std::lock_guard lock(task_mutex);
-        task_queue.push(std::move(task));
-    }
+    // post(), not submit(): we can't just spin-wait for the response here,
+    // because while the worker thread is inside pydrofoil_cpu_simulate() it
+    // may need us to service a non-DMI memory access via memtask_mailbox --
+    // and that's *this* thread's job (see memory_callbacks.cpp). So this
+    // loop multiplexes "is the Simulate task done yet" against "does the
+    // worker need a memory access serviced", spinning on both mailboxes.
+    task_mailbox.post(task);
 
-    task_cv.notify_one(); // notify the waiting thread
-
-    while(done.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
-        MemAccess memtask;
-
-        {
-            std::unique_lock<std::mutex> lock(memtask_mutex);
-            memtask_cv.wait(lock, [&] {
-                return !memtask_queue.empty() || (done.wait_for(std::chrono::seconds(0)) == std::future_status::ready);
-            });
-
-            if(memtask_queue.empty())
-                continue;
-
-            memtask = std::move(memtask_queue.front());
-            memtask_queue.pop();
-        }
+    while(!task_mailbox.is_done()) {
+        MemAccess* memtask = memtask_mailbox.try_take();
+        if(memtask == nullptr)
+            continue;
 
         bool success = false;
-        if(memtask.type == MemTask::Read) {
-            success = (data.read(memtask.addr, memtask.dest, memtask.size, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE);
+        if(memtask->type == MemTask::Read) {
+            success = (data.read(memtask->addr, memtask->dest, memtask->size, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE);
             // memset(memtask.dest,0x297,8); // To be removed once the 0x1000 initial accesses are fixed
         } else
-            success = (data.write(memtask.addr, &memtask.value, memtask.size, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE);
+            success = (data.write(memtask->addr, &memtask->value, memtask->size, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE);
 
         if(!success)
-            mwr::log_info("Memory access failed with address: %lx", memtask.addr);
+            mwr::log_info("Memory access failed with address: %lx", memtask->addr);
 
-        memtask.result.set_value(success);
+        memtask->success = success;
+        memtask_mailbox.complete();
     }
+    task_mailbox.wait_done(); // already done; this just resets the mailbox for the next call
 
-    size_t current_steps = done.get();
-    bool brkpt_hit = current_steps > 0 && current_steps < cycles;
+    size_t current_steps = task.result;
+    bool early_return = current_steps > 0 && current_steps < cycles;
 
-    if(!step && brkpt_hit)
+    // htif_done has to be checked unconditionally: unlike a breakpoint hit,
+    // guest exit doesn't reliably make current_steps land below cycles (it
+    // depends on where inside the quantum's tick-batching the exit-triggering
+    // write happens to fall), so it can't be inferred from early_return.
+    if(!step && check_htif_done())
+        handle_guest_exit();
+    else if(!step && early_return)
         handle_breakpoint_hit();
 
     n_cycles += current_steps;
     check_for_dmi_regions();
     step = false;
+}
+
+bool PydrofoilCore::check_htif_done()
+{
+    backend::PythonTask task;
+    task.py_funct = backend::Funct::GetExit;
+    task_mailbox.submit(task);
+    return task.result != 0;
+}
+
+void PydrofoilCore::handle_guest_exit()
+{
+    mwr::log_info("Stop requested");
+    vcml::request_stop();
 }
 
 void PydrofoilCore::handle_breakpoint_hit()
@@ -270,15 +257,8 @@ bool PydrofoilCore::insert_breakpoint(vcml::u64 addr)
     backend::PythonTask task;
     task.py_funct = backend::Funct::SetBrkp;
     task.arg = addr;
-    std::future<uint64_t> done = task.result.get_future();
-
-    {
-        std::lock_guard lock(task_mutex);
-        task_queue.push(std::move(task));
-    }
-
-    task_cv.notify_one(); // notify the waiting thread
-    return done.get();
+    task_mailbox.submit(task);
+    return task.result;
 }
 
 bool PydrofoilCore::remove_breakpoint(vcml::u64 addr)
@@ -286,15 +266,8 @@ bool PydrofoilCore::remove_breakpoint(vcml::u64 addr)
     backend::PythonTask task;
     task.py_funct = backend::Funct::RemoveBrkp;
     task.arg = addr;
-    std::future<uint64_t> done = task.result.get_future();
-
-    {
-        std::lock_guard lock(task_mutex);
-        task_queue.push(std::move(task));
-    }
-
-    task_cv.notify_one(); // notify the waiting thread
-    return done.get();
+    task_mailbox.submit(task);
+    return task.result;
 }
 
 // Called from a coroutine
@@ -308,88 +281,137 @@ void PydrofoilCore::reset()
     // pydrofoil_cpu_reset(cpu);
 }
 
-/* How it would look like without the std::future
-   Pros: faster (see profiling)
-   Cons: error prone
-   --> Unless in the profiling we see that it's the bottleneck we stick with it
-void PydrofoilCore::set_pc(vcml::u64 value)
+void PydrofoilCore::set_insns_tick(vcml::u64 val)
 {
-    auto task = std::make_shared<PythonTask>(); //both threads refer to the same object
-    task->py_funct = Funct::SetPc;
-    task->arg = value;
-
-    {
-        std::lock_guard lock(task_mutex);
-        task_queue.push(task);  // Now we're copying a pointer to the struct
-    }
-    task_cv.notify_one(); // notify the waiting thread
-
-    {
-        std::unique_lock lock(task->done_mutex);
-        task->done_cv.wait(lock, [&] { return task->done; });
-    }
-    return done.value;
+    insns_per_tick = val;
 }
-*/
+
+// NOTE: the std::future/std::promise + mutex/condition_variable handoff this
+// file used to have (and the shared_ptr-based sketch that used to live here
+// as a "faster but error prone" alternative) has been replaced by
+// backend::Mailbox (see mailbox.h): a lock-free single-slot rendezvous. It
+// gets the speed of the sketch below without its problems -- no shared_ptr
+// lifetime juggling, no separate done_mutex/done_cv per task, still exactly
+// one thread ever calls into pydrofoil.
 
 void PydrofoilCore::set_verbosity(bool value)
 {
     backend::PythonTask task;
     task.py_funct = backend::Funct::SetVerbosity;
     task.arg = (uint32_t) value;
-    std::future<uint64_t> done = task.result.get_future();
-
-    {
-        std::lock_guard lock(task_mutex);
-        task_queue.push(std::move(task));
-    }
-    task_cv.notify_one(); // notify the waiting thread
-
-    done.get(); // Wait for the result
+    task_mailbox.submit(task);
 }
 
+// The reason why we need a second thread is that it's important to avoid breaking RPython mrmory tracking
+// Now all the actions that call python functions will be in one single thread
 void PydrofoilCore::python_worker_loop()
 {
     std::unordered_map<backend::Funct, std::function<void(backend::PythonTask&)>> handlers = backend::create_handlers(
         *this);
 
     while(true) {
-        backend::PythonTask task;
-
-        { // We need unique_lock because:
-            // 1. we need wait()
-            // 2. wait can temporarely release the lock and reacquire once notified
-            // Neither 1. nor 2. are supported by lock_guard
-            std::unique_lock<std::mutex> lock(task_mutex);
-            task_cv.wait(lock, [this] { return !task_queue.empty() || stop_worker; });
-
-            if(stop_worker && task_queue.empty())
-                break;
-
-            task = std::move(task_queue.front()); // PythonTask has std::promise, not copyable!
-            task_queue.pop();                     // pop: reason not to use eg vectors
-        } // --> lock released (out of scope)
+        backend::PythonTask& task = task_mailbox.take(); // spins until the caller side posts a request
 
         auto it = handlers.find(task.py_funct);
         if(it != handlers.end())
             it->second(task);
+
+        task_mailbox.complete(); // unblocks the caller's wait_done()/is_done()
+
+        // stop_worker is set (by ~PydrofoilCore()) strictly before that
+        // final FreeCpu request is posted, so it's already visible to us
+        // here -- handle the task first (FreeCpu still has to run), then
+        // exit.
+        if(stop_worker)
+            break;
     }
 }
 
-void PydrofoilCore::end_of_elaboration()
+// Write out a span of guest physical memory, reading it straight from the
+// DMI window the platform already granted pydrofoil. Going through the bus
+// instead would work too, but this runs after the simulation has stopped,
+// where issuing TLM transactions is the more surprising of the two.
+void PydrofoilCore::dump_guest_memory()
 {
-    processor::end_of_elaboration();
+    const std::string spec = mem_dump.get();
+    if(spec.empty())
+        return;
 
+    size_t c1 = spec.find(':');
+    size_t c2 = (c1 == std::string::npos) ? std::string::npos : spec.find(':', c1 + 1);
+    if(c1 == std::string::npos || c2 == std::string::npos) {
+        mwr::log_warn("mem_dump: expected \"path:0xLO:0xLEN\", got \"%s\"", spec.c_str());
+        return;
+    }
+
+    const std::string path = spec.substr(0, c1);
+    const uint64_t lo = std::stoull(spec.substr(c1 + 1, c2 - c1 - 1), nullptr, 0);
+    const uint64_t len = std::stoull(spec.substr(c2 + 1), nullptr, 0);
+
+    for(const auto& entry : mem_regions) {
+        const MemRegion& r = entry.second;
+        if(lo < r.start_addr || lo + len > r.start_addr + r.size)
+            continue;
+
+        FILE* f = std::fopen(path.c_str(), "wb");
+        if(f == nullptr) {
+            mwr::log_warn("mem_dump: cannot open '%s'", path.c_str());
+            return;
+        }
+        std::fwrite(r.ptr + (lo - r.start_addr), 1, len, f);
+        std::fclose(f);
+        mwr::log_info("mem_dump: wrote 0x%lx bytes from 0x%lx to '%s'", (unsigned long)len,
+                      (unsigned long)lo, path.c_str());
+        return;
+    }
+
+    mwr::log_warn("mem_dump: no DMI region covers 0x%lx..0x%lx", (unsigned long)lo,
+                  (unsigned long)(lo + len));
+}
+
+void PydrofoilCore::end_of_simulation()
+{
+    dump_guest_memory();
+    processor::end_of_simulation();
+}
+
+void PydrofoilCore::before_end_of_elaboration()
+{
+    // Installing the memory callbacks rebuilds the machine object, and a
+    // fresh machine has freshly reset registers. processor's own
+    // before_end_of_elaboration() is what flushes the cpureg properties
+    // (system.<core>.pc, .a0, .a1, ...) into the model, so the callbacks
+    // have to be in place *first* -- otherwise every register the
+    // configuration asks for is silently discarded a moment later. That
+    // went unnoticed while the only image in use started at the model's
+    // own reset PC, where the wipe is a no-op.
     backend::PythonTask task;
     task.py_funct = backend::Funct::SetCb;
-    std::future<uint64_t> done = task.result.get_future();
+    task_mailbox.submit(task);
 
-    {
-        std::lock_guard lock(task_mutex);
-        task_queue.push(std::move(task));
+    // Same reasoning, and it must also precede any guest execution: the
+    // model consults tohost on every access, not just at startup.
+    if(htif_tohost.get() != 0) {
+        backend::PythonTask htif_task;
+        htif_task.py_funct = backend::Funct::SetHtifTohost;
+        htif_task.arg = (uint64_t)htif_tohost.get();
+        task_mailbox.submit(htif_task);
+        mwr::log_info("HTIF tohost placed at 0x%lx", (unsigned long)htif_tohost.get());
     }
-    task_cv.notify_one(); // notify the waiting thread
-    done.get();           // Wait for the result
+
+    task.py_funct = backend::Funct::SetExtClint;
+    task.arg = uint64_t{1};
+    task_mailbox.submit(task);
+
+    task.py_funct = backend::Funct::SetIrqLines;
+    task.arg = reinterpret_cast<uint64_t*>(&irq_lines);
+    task_mailbox.submit(task);
+
+    task.py_funct = backend::Funct::SetTickFreq;
+    task.arg = insns_per_tick;
+    task_mailbox.submit(task);
+
+    processor::before_end_of_elaboration();
 }
 
 } // namespace core
