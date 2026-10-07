@@ -18,6 +18,7 @@ namespace virtual_platform {
 
 system::system(const sc_core::sc_module_name& nm):
     vcml::system(nm),
+    ncores("ncores", 1),
     ram("ram", {SRAM_LO, SRAM_HI}),
     bram("bram", {BOOT_LO, BOOT_HI}),
     addr_uart0("addr_uart0", {UART0_LO, UART0_HI}),
@@ -31,7 +32,7 @@ system::system(const sc_core::sc_module_name& nm):
     irq_uart0("irq_uart0", IRQ_UART0),
     irq_uart8250("irq_uart8250", IRQ_UART8250),
     irq_virtio0("irq_virtio0", IRQ_VIRTIO0),
-    m_core("core"),
+    m_cores(),
     m_bus("bus"),
     m_ram("sram", ram.get().length()),
     m_bram("bram", bram.get().length()),
@@ -45,13 +46,19 @@ system::system(const sc_core::sc_module_name& nm):
     m_clint("clint"),
     m_term("term"),
     m_simdev("simdev"),
-    m_multicore_simdev("multicore_simdev", 1), // single core for now
+    m_multicore_simdev("multicore_simdev", ncores),
     m_uart8250("uart8250"),
     m_term8250("term8250"),
     m_hwrng("hwrng"),
     m_virtio0("virtio0"),
     m_virtio_blk("virtio_blk")
 {
+    VCML_ERROR_ON(ncores == 0, "system.ncores must be at least 1");
+    for(size_t i = 0; i < ncores; ++i) {
+        std::string name = "core" + std::to_string(i);
+        m_cores.push_back(std::make_unique<core::PydrofoilCore>(name.c_str(), i));
+    }
+
     tlm_bind(m_bus, m_loader, "insn");
     tlm_bind(m_bus, m_loader, "data");
     tlm_bind(m_bus, m_ram, "in", ram);
@@ -68,10 +75,6 @@ system::system(const sc_core::sc_module_name& nm):
     // master as well as a target.
     tlm_bind(m_bus, m_virtio0, "out");
 
-    tlm_bind(m_bus, m_core, "insn");
-    tlm_bind(m_bus, m_core, "data");
-
-    clk_bind(m_clock_cpu, "clk", m_core, "clk");
     clk_bind(m_clock_cpu, "clk", m_ram, "clk");
     clk_bind(m_clock_cpu, "clk", m_bram, "clk");
     clk_bind(m_clock_cpu, "clk", m_bus, "clk");
@@ -85,7 +88,6 @@ system::system(const sc_core::sc_module_name& nm):
     clk_bind(m_clock_cpu, "clk", m_hwrng, "clk");
     clk_bind(m_clock_cpu, "clk", m_virtio0, "clk");
 
-    gpio_bind(m_reset, "rst", m_core, "rst");
     gpio_bind(m_reset, "rst", m_bus, "rst");
     gpio_bind(m_reset, "rst", m_ram, "rst");
     gpio_bind(m_reset, "rst", m_bram, "rst");
@@ -104,21 +106,29 @@ system::system(const sc_core::sc_module_name& nm):
     gpio_bind(m_uart8250, "irq", m_plic, "irqs", IRQ_UART8250);
     gpio_bind(m_virtio0, "irq", m_plic, "irqs", IRQ_VIRTIO0);
 
-    // Connect the core irq to the plic (init socket).
-    //
-    // One PLIC context per privilege level, in the order the guest device
-    // tree lists them under interrupts-extended: context 0 is hart 0's
-    // M-mode external interrupt, context 1 its S-mode one. Firmware running
-    // in M-mode claims from the first, the OS from the second; a kernel
-    // booted under SBI only ever programs context 1, so without this second
-    // binding its external interrupts are enabled in the PLIC and never
-    // delivered.
-    m_plic.irqt[0].bind(m_core.irq[core::MEIP]);
-    m_plic.irqt[1].bind(m_core.irq[core::SEIP]);
+    for(size_t i = 0; i < m_cores.size(); ++i) {
+        core::PydrofoilCore& c = *m_cores[i];
 
-    // Only one core for now
-    gpio_bind(m_clint, "irq_timer", 0, m_core, "irq", core::MTIP);
-    gpio_bind(m_clint, "irq_sw",    0, m_core, "irq", core::MSIP);
+        tlm_bind(m_bus, c, "insn");
+        tlm_bind(m_bus, c, "data");
+        clk_bind(m_clock_cpu, "clk", c, "clk");
+        gpio_bind(m_reset, "rst", c, "rst");
+
+        // Connect the core irq to the plic (init socket).
+        //
+        // One PLIC context per privilege level, in the order the guest device
+        // tree lists them under interrupts-extended: context 2i is hart i's
+        // M-mode external interrupt, context 2i+1 its S-mode one. Firmware
+        // running in M-mode claims from the first, the OS from the second; a
+        // kernel booted under SBI only ever programs the S-mode context, so
+        // without this second binding its external interrupts are enabled in
+        // the PLIC and never delivered.
+        m_plic.irqt[2 * i].bind(c.irq[core::MEIP]);
+        m_plic.irqt[2 * i + 1].bind(c.irq[core::SEIP]);
+
+        gpio_bind(m_clint, "irq_timer", i, c, "irq", core::MTIP);
+        gpio_bind(m_clint, "irq_sw", i, c, "irq", core::MSIP);
+    }
 
     virtio_bind(m_virtio0, "virtio_out", m_virtio_blk, "virtio_in");
 
@@ -134,7 +144,8 @@ system::system(const sc_core::sc_module_name& nm):
         vcml::log_error("clk_cpu (%llu Hz) must be an integer multiple of clk_clint (%llu Hz)",
                     (unsigned long long)cpu_hz, (unsigned long long)rtc_hz);
     
-    m_core.set_insns_tick(cpu_hz / rtc_hz);
+    for(auto& c : m_cores)
+        c->set_insns_tick(cpu_hz / rtc_hz);
 }
 
 system::~system()
@@ -148,13 +159,20 @@ int system::run()
     int result = vcml::system::run();
     double realtime = mwr::timestamp() - simstart;
     double duration = sc_core::sc_time_stamp().to_seconds();
-    vcml::u64 ninsn = m_core.cycle_count();
+    vcml::u64 ninsn = 0;
+    for(auto& c : m_cores)
+        ninsn += c->cycle_count();
 
     double mips = realtime == 0.0 ? 0.0 : ninsn / realtime / 1e6;
     vcml::log_info("total");
     vcml::log_info("  duration       : %.9fs", duration);
     vcml::log_info("  runtime        : %.4fs", realtime);
+    vcml::log_info("  cores          : %zu", m_cores.size());
     vcml::log_info("  instructions   : %llu", ninsn);
+    if(m_cores.size() > 1) {
+        for(auto& c : m_cores)
+            vcml::log_info("    hart %-9lu: %llu", (unsigned long)c->hart_id, c->cycle_count());
+    }
     vcml::log_info("  sim speed      : %.1f MIPS", mips);
     vcml::log_info("  realtime ratio : %.2f / 1s", realtime == 0.0 ? 0.0 : realtime / duration);
     // wall-clock time since the guest last read multicore_simdev.hclk (benchmark start)

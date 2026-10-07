@@ -19,6 +19,8 @@
 #include "vcml/models/virtio/blk.h"
 #include "uart_injector.h"
 #include "multicore_simdev.h"
+#include <memory>
+#include <vector>
 
 namespace virtual_platform {
 
@@ -72,6 +74,7 @@ class system : public vcml::system {
     using u64 = vcml::u64;
     using range = vcml::range;
 
+    vcml::property<size_t> ncores;
     vcml::property<range> ram;
     vcml::property<range> bram;
     vcml::property<range> addr_uart0;
@@ -94,7 +97,8 @@ class system : public vcml::system {
     virtual int run() override;
 
     private:
-    core::PydrofoilCore m_core;
+    // system.core0 ... system.core<ncores-1>, hart id = index
+    std::vector<std::unique_ptr<core::PydrofoilCore>> m_cores;
 
     vcml::generic::bus m_bus;
     vcml::generic::memory m_ram;

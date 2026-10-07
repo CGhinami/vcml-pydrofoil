@@ -49,7 +49,8 @@ enum class Funct {
     SetTickFreq,
     SetExtClint,
     RemoveBrkp,
-    GetExit
+    GetExit,
+    SetHartId
 };
 
 struct PythonTask {

@@ -14,13 +14,15 @@
 
 namespace core {
 
-PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name):
+PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name, uint64_t hart_id):
     vcml::processor(name, "riscv"),
     elf("elf", ""),
     arch_name("arch_name", "rv64"),
     verbosity("verbose", false),
     htif_tohost("htif_tohost", 0),
     mem_dump("mem_dump", ""),
+    pydrofoil_lib("pydrofoil_lib", PYDROFOIL_CAPI_LIB),
+    hart_id(hart_id),
     cpu(nullptr),
     use_dmi(true),
     n_cycles(0),
@@ -31,6 +33,9 @@ PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name):
 {
     mwr::log_info("Running with arch: %d bit", 8 * core_arch.word_size());
     set_little_endian(); // Otherwise the gdbserver inverts the bytes it reads
+
+    std::string err = lib.load(pydrofoil_lib.get());
+    VCML_ERROR_ON(!err.empty(), "hart %lu: %s", (unsigned long)hart_id, err.c_str());
 
     python_worker_thread = std::thread(&PydrofoilCore::python_worker_loop, this);
 
@@ -445,6 +450,11 @@ void PydrofoilCore::before_end_of_elaboration()
     task.py_funct = backend::Funct::SetTickFreq;
     task.arg = insns_per_tick;
     task_mailbox.submit(task);
+
+    task.py_funct = backend::Funct::SetHartId;
+    task.arg = hart_id;
+    task_mailbox.submit(task);
+    VCML_ERROR_ON(task.result != 0, "hart %lu: setting mhartid failed", (unsigned long)hart_id);
 
     processor::before_end_of_elaboration();
 }

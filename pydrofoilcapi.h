@@ -48,6 +48,9 @@ CFFI_DLLEXPORT int pydrofoil_cpu_set_external_clint(void* cpu, int enable);
 CFFI_DLLEXPORT int pydrofoil_set_interrupt_lines(void* cpu, uint64_t* lines_ptr);
 CFFI_DLLEXPORT int pydrofoil_set_instructions_per_tick(void* cpu, uint64_t insns_per_tick);
 
+// Value of the mhartid CSR, re-applied whenever the model is rebuilt
+CFFI_DLLEXPORT int pydrofoil_cpu_set_hartid(void* cpu, uint64_t hartid);
+
 //
 
 CFFI_DLLEXPORT int pydrofoil_cpu_set_ram_read_write_callback(

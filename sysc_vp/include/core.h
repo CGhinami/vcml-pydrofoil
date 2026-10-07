@@ -13,6 +13,7 @@
 #include "vcml.h"
 #include <systemc>
 #include "python_tasks.h"
+#include "pydrofoil_lib.h"
 #include "mailbox.h"
 #include <unordered_map>
 #include "arch.h"
@@ -54,10 +55,14 @@ class PydrofoilCore : public vcml::processor {
     // "path:0xLO:0xLEN" --> write that span of guest physical memory
     // A guest that patches its own text has to be lifted from what it settled on
     vcml::property<std::string> mem_dump;
+    // the libpydrofoilcapi_cffi.so this hart loads its private copy from
+    vcml::property<std::string> pydrofoil_lib;
 
-    PydrofoilCore(const sc_core::sc_module_name& name);
+    PydrofoilCore(const sc_core::sc_module_name& name, uint64_t hart_id = 0);
     virtual ~PydrofoilCore();
 
+    const uint64_t hart_id;
+    backend::PydrofoilLib lib;
     void* cpu;
 
     bool use_dmi;

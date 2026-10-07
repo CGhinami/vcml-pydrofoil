@@ -33,6 +33,7 @@ class C:
         self.ext_clint = None
         self.irq_lines_ptr = None
         self.insns_per_tick = None
+        self.hartid = None
         self.reset()
 
     def _set_callbacks(self, read, write, payload):
@@ -98,6 +99,8 @@ class C:
             self.cpu._set_instructions_per_tick(self.insns_per_tick)
         if self.irq_lines_ptr is not None:
             self.cpu._set_irq_lines_ptr(self.irq_lines_ptr)
+        if self.hartid is not None:
+            self.cpu.write_register('mhartid', self.hartid)
         self.set_verbosity(self.verbosity)
 
 def _apply_jit_params():
@@ -308,6 +311,17 @@ def pydrofoil_set_instructions_per_tick(i, insns_per_tick):
     cpu = ffi.from_handle(i)
     cpu.insns_per_tick = int(insns_per_tick)
     cpu.cpu._set_instructions_per_tick(cpu.insns_per_tick)
+    return 0
+
+@ffi.def_extern()
+def pydrofoil_cpu_set_hartid(i, hartid):
+    cpu = ffi.from_handle(i)
+    cpu.hartid = int(hartid)
+    try:
+        cpu.cpu.write_register('mhartid', cpu.hartid)
+    except Exception as e:
+        print("Setting mhartid failed:", e)
+        return 1
     return 0
 
 @ffi.def_extern()
