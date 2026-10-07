@@ -18,6 +18,7 @@
 #include "vcml/models/virtio/mmio.h"
 #include "vcml/models/virtio/blk.h"
 #include "uart_injector.h"
+#include "multicore_simdev.h"
 
 namespace virtual_platform {
 
@@ -41,6 +42,9 @@ enum : mwr::u64 {
 
     SIMDEV_LO = 0x10008000,
     SIMDEV_HI = SIMDEV_LO + 0x1000 - 1,
+
+    MULTICORE_SIMDEV_LO = 0x1C203000,
+    MULTICORE_SIMDEV_HI = MULTICORE_SIMDEV_LO + 0x1000 - 1,
 
     // The peripherals below exist for OS images that expect drivers the
     // kernel actually ships: an ns16550a console, a virtio-mmio root disk
@@ -74,6 +78,7 @@ class system : public vcml::system {
     vcml::property<range> addr_plic;
     vcml::property<range> addr_clint;
     vcml::property<vcml::range> addr_simdev;
+    vcml::property<range> addr_multicore_simdev;
     vcml::property<range> addr_uart8250;
     vcml::property<range> addr_hwrng;
     vcml::property<range> addr_virtio0;
@@ -110,6 +115,7 @@ class system : public vcml::system {
 
     vcml::serial::terminal m_term;
     vcml::meta::simdev m_simdev;
+    vcml::meta::multicore_simdev m_multicore_simdev;
 
     // ns16550a-compatible console: byte-wide registers at offsets 0..7, so
     // the "ns16550a" device-tree defaults (reg-shift 0, reg-io-width 1) fit

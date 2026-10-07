@@ -106,6 +106,8 @@ class PydrofoilCore : public vcml::processor {
 
     private:
     bool step;
+    // the Simulate task posted by simulate() while it is not yet collected
+    backend::PythonTask* simulate_in_flight = nullptr;
     uint64_t insns_per_tick;
 
     // Latest requested level per interrupt line, applied at the top of the
@@ -130,6 +132,7 @@ class PydrofoilCore : public vcml::processor {
     void handle_breakpoint_hit();
 
     void dump_guest_memory();
+    void finish_inflight_simulate();
 
     protected:
     virtual void before_end_of_elaboration() override;

@@ -24,6 +24,7 @@ system::system(const sc_core::sc_module_name& nm):
     addr_plic("addr_plic", {PLIC_LO, PLIC_HI}),
     addr_clint("addr_clint", {CLINT_LO, CLINT_HI}),
     addr_simdev("addr_simdev", {SIMDEV_LO, SIMDEV_HI}),
+    addr_multicore_simdev("addr_multicore_simdev", {MULTICORE_SIMDEV_LO, MULTICORE_SIMDEV_HI}),
     addr_uart8250("addr_uart8250", {UART8250_LO, UART8250_HI}),
     addr_hwrng("addr_hwrng", {HWRNG_LO, HWRNG_HI}),
     addr_virtio0("addr_virtio0", {VIRTIO0_LO, VIRTIO0_HI}),
@@ -44,6 +45,7 @@ system::system(const sc_core::sc_module_name& nm):
     m_clint("clint"),
     m_term("term"),
     m_simdev("simdev"),
+    m_multicore_simdev("multicore_simdev", 1), // single core for now
     m_uart8250("uart8250"),
     m_term8250("term8250"),
     m_hwrng("hwrng"),
@@ -58,6 +60,7 @@ system::system(const sc_core::sc_module_name& nm):
     tlm_bind(m_bus, m_clint, "in", addr_clint);
     tlm_bind(m_bus, m_uart0, "in", addr_uart0);
     tlm_bind(m_bus, m_simdev, "in", addr_simdev);
+    tlm_bind(m_bus, m_multicore_simdev, "in", addr_multicore_simdev);
     tlm_bind(m_bus, m_uart8250, "in", addr_uart8250);
     tlm_bind(m_bus, m_hwrng, "in", addr_hwrng);
     tlm_bind(m_bus, m_virtio0, "in", addr_virtio0);
@@ -77,6 +80,7 @@ system::system(const sc_core::sc_module_name& nm):
     clk_bind(m_clock_rtc, "clk", m_clint, "clk");   // This is a temporary patch
     clk_bind(m_clock_cpu, "clk", m_uart0, "clk");
     clk_bind(m_clock_cpu, "clk", m_simdev, "clk");
+    clk_bind(m_clock_cpu, "clk", m_multicore_simdev, "clk");
     clk_bind(m_clock_cpu, "clk", m_uart8250, "clk");
     clk_bind(m_clock_cpu, "clk", m_hwrng, "clk");
     clk_bind(m_clock_cpu, "clk", m_virtio0, "clk");
@@ -90,6 +94,7 @@ system::system(const sc_core::sc_module_name& nm):
     gpio_bind(m_reset, "rst", m_clint, "rst");
     gpio_bind(m_reset, "rst", m_uart0, "rst");
     gpio_bind(m_reset, "rst", m_simdev, "rst");
+    gpio_bind(m_reset, "rst", m_multicore_simdev, "rst");
     gpio_bind(m_reset, "rst", m_uart8250, "rst");
     gpio_bind(m_reset, "rst", m_hwrng, "rst");
     gpio_bind(m_reset, "rst", m_virtio0, "rst");
@@ -152,6 +157,9 @@ int system::run()
     vcml::log_info("  instructions   : %llu", ninsn);
     vcml::log_info("  sim speed      : %.1f MIPS", mips);
     vcml::log_info("  realtime ratio : %.2f / 1s", realtime == 0.0 ? 0.0 : realtime / duration);
+    // wall-clock time since the guest last read multicore_simdev.hclk (benchmark start)
+    if(m_multicore_simdev.last_queried_time > 0.0)
+        vcml::log_info("  benchmark time : %.4fs", mwr::timestamp() - m_multicore_simdev.last_queried_time);
     vcml::log_info("  slowpath reads : %llu", (unsigned long long) g_slowpath_read_count.load());
     vcml::log_info("  slowpath writes: %llu", (unsigned long long) g_slowpath_write_count.load());
 

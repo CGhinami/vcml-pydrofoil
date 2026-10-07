@@ -9,6 +9,7 @@
 
 #include "core.h"
 #include <cstdio>
+#include <cstring>
 #include "riscv_arch.h"
 
 namespace core {
@@ -65,6 +66,9 @@ void PydrofoilCore::test_reg_access(size_t regno)
 
 PydrofoilCore::~PydrofoilCore()
 {
+    // normally already done in end_of_simulation()
+    finish_inflight_simulate();
+
     if(cpu) {
         backend::PythonTask task;
         task.py_funct = backend::Funct::FreeCpu;
@@ -190,6 +194,7 @@ void PydrofoilCore::simulate(size_t cycles)
     // loop multiplexes "is the Simulate task done yet" against "does the
     // worker need a memory access serviced", spinning on both mailboxes.
     task_mailbox.post(task);
+    simulate_in_flight = &task;
 
     while(!task_mailbox.is_done()) {
         MemAccess* memtask = memtask_mailbox.try_take();
@@ -210,6 +215,7 @@ void PydrofoilCore::simulate(size_t cycles)
         memtask_mailbox.complete();
     }
     task_mailbox.wait_done(); // already done; this just resets the mailbox for the next call
+    simulate_in_flight = nullptr;
 
     size_t current_steps = task.result;
     bool early_return = current_steps > 0 && current_steps < cycles;
@@ -369,8 +375,37 @@ void PydrofoilCore::dump_guest_memory()
                   (unsigned long)(lo + len));
 }
 
+// The simulation can end while the worker is still inside a Simulate task:
+// sc_stop() requested mid-quantum (e.g. by a peripheral) leaves the SystemC
+// thread that services the worker's memory accesses suspended in a wait()
+// (e.g. the CLINT's sync on mtime) that never returns. Answer the remaining
+// accesses here (reads see 0) until the worker finishes the quantum,
+// otherwise it never picks up another task and we deadlock. Must run while
+// the RAM still exists, the worker keeps reading it through DMI.
+void PydrofoilCore::finish_inflight_simulate()
+{
+    if(!simulate_in_flight)
+        return;
+
+    while(!task_mailbox.is_done()) {
+        MemAccess* memtask = memtask_mailbox.try_take();
+        if(memtask == nullptr)
+            continue;
+        if(memtask->type == MemTask::Read)
+            std::memset(memtask->dest, 0, memtask->size);
+        memtask->success = true;
+        memtask_mailbox.complete();
+    }
+    task_mailbox.wait_done();
+
+    // simulate() never got to count this quantum
+    n_cycles += simulate_in_flight->result;
+    simulate_in_flight = nullptr;
+}
+
 void PydrofoilCore::end_of_simulation()
 {
+    finish_inflight_simulate();
     dump_guest_memory();
     processor::end_of_simulation();
 }
