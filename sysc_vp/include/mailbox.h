@@ -9,13 +9,18 @@
 
 #pragma once
 #include <atomic>
+#include <chrono>
 #include <thread>
 
 namespace backend {
 
 // A short busy-wait before falling back to std::this_thread::yield().
 // Avoids ever calling into the kernel (mutex/condition_variable) on the fast
-// path, which is what makes std::condition_variable both slow and noisy
+// path, which is what makes std::condition_variable both slow and noisy.
+// A long wait (e.g. for a whole quantum of guest code) ends up sleeping: every
+// hart has two threads of which one is always waiting, and with more busy
+// threads than host CPUs the ones doing the actual work would otherwise only
+// get a CPU every scheduler time slice.
 inline void relax(int& spins)
 {
 #if defined(__x86_64__) || defined(__i386__)
@@ -23,7 +28,10 @@ inline void relax(int& spins)
 #elif defined(__aarch64__)
     asm volatile("yield");
 #endif
-    if(++spins > 4000)
+    ++spins;
+    if(spins > 8000)
+        std::this_thread::sleep_for(std::chrono::microseconds(20));
+    else if(spins > 4000)
         std::this_thread::yield();
 }
 

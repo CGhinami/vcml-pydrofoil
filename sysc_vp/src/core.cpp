@@ -202,10 +202,14 @@ void PydrofoilCore::simulate(size_t cycles)
     simulate_in_flight = &task;
 
     try {
+        int spins = 0;
         while(!task_mailbox.is_done()) {
             MemAccess* memtask = memtask_mailbox.try_take();
-            if(memtask == nullptr)
+            if(memtask == nullptr) {
+                backend::relax(spins);
                 continue;
+            }
+            spins = 0;
 
             bool success = service_memtask(*memtask);
             if(!success)
