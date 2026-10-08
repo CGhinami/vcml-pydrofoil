@@ -138,6 +138,7 @@ class PydrofoilCore : public vcml::processor {
 
     void dump_guest_memory();
     void finish_inflight_simulate();
+    bool service_memtask(MemAccess& memtask);
 
     protected:
     virtual void before_end_of_elaboration() override;

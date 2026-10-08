@@ -201,23 +201,25 @@ void PydrofoilCore::simulate(size_t cycles)
     task_mailbox.post(task);
     simulate_in_flight = &task;
 
-    while(!task_mailbox.is_done()) {
-        MemAccess* memtask = memtask_mailbox.try_take();
-        if(memtask == nullptr)
-            continue;
+    try {
+        while(!task_mailbox.is_done()) {
+            MemAccess* memtask = memtask_mailbox.try_take();
+            if(memtask == nullptr)
+                continue;
 
-        bool success = false;
-        if(memtask->type == MemTask::Read) {
-            success = (data.read(memtask->addr, memtask->dest, memtask->size, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE);
-            // memset(memtask.dest,0x297,8); // To be removed once the 0x1000 initial accesses are fixed
-        } else
-            success = (data.write(memtask->addr, &memtask->value, memtask->size, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE);
+            bool success = service_memtask(*memtask);
+            if(!success)
+                mwr::log_info("Memory access failed with address: %lx", memtask->addr);
 
-        if(!success)
-            mwr::log_info("Memory access failed with address: %lx", memtask->addr);
-
-        memtask->success = success;
-        memtask_mailbox.complete();
+            memtask->success = success;
+            memtask_mailbox.complete();
+        }
+    } catch(...) {
+        // async=true: sc_sync() throws once the simulation has ended. The
+        // worker is still inside the Simulate task and will write into
+        // 'task', so let it finish before this frame is unwound.
+        finish_inflight_simulate();
+        throw;
     }
     task_mailbox.wait_done(); // already done; this just resets the mailbox for the next call
     simulate_in_flight = nullptr;
@@ -239,6 +241,27 @@ void PydrofoilCore::simulate(size_t cycles)
     step = false;
 }
 
+// With async=true simulate() runs on vcml's async thread, which must not
+// drive TLM transactions itself (peripherals may wait() on them): sc_sync()
+// hands the access to the SystemC thread and blocks until it is done. On the
+// SystemC thread (async=false) it is done directly.
+bool PydrofoilCore::service_memtask(MemAccess& memtask)
+{
+    bool success = false;
+    auto access = [&]() {
+        if(memtask.type == MemTask::Read)
+            success = data.read(memtask.addr, memtask.dest, memtask.size, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE;
+        else
+            success = data.write(memtask.addr, &memtask.value, memtask.size, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE;
+    };
+
+    if(vcml::sc_is_async())
+        vcml::sc_sync(access);
+    else
+        access();
+    return success;
+}
+
 bool PydrofoilCore::check_htif_done()
 {
     backend::PythonTask task;
@@ -250,7 +273,11 @@ bool PydrofoilCore::check_htif_done()
 void PydrofoilCore::handle_guest_exit()
 {
     mwr::log_info("Stop requested");
-    vcml::request_stop();
+    // sc_stop() may only be called from the SystemC thread
+    if(vcml::sc_is_async())
+        vcml::sc_sync([]() { vcml::request_stop(); });
+    else
+        vcml::request_stop();
 }
 
 void PydrofoilCore::handle_breakpoint_hit()
@@ -410,6 +437,10 @@ void PydrofoilCore::finish_inflight_simulate()
 
 void PydrofoilCore::end_of_simulation()
 {
+    // async=true: simulate() runs on vcml's async thread, join it before
+    // touching the mailboxes from here (it finishes or drains its own quantum)
+    if(async)
+        vcml::sc_join_async();
     finish_inflight_simulate();
     dump_guest_memory();
     processor::end_of_simulation();
