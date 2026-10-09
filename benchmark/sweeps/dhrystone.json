@@ -1,0 +1,6 @@
+[
+    {"benchmark": "dhrystone", "runs": 1, "timeout": 900,
+     "n_cores": [1, 2, 4, 8],
+     "quantum": ["1us", "10us", "100us", "1ms"],
+     "async": [false, true], "async_rate": [1, 5, 10]}
+]

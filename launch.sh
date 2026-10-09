@@ -1,7 +1,9 @@
 #!/bin/bash
 
-# without gdb: ./launch.sh <path to myconfig.cfg>
-# with gdb: ./launch.sh -d <path to myconfig.cfg>
+# without gdb: ./launch.sh <path to myconfig.cfg> [extra sysc_vp args]
+# with gdb: ./launch.sh -d <path to myconfig.cfg> [extra sysc_vp args]
+# extra args come after -f and override the config file, e.g.
+#   ./launch.sh <cfg> -c system.ncores=4 -c system.quantum=1us
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PYDROFOIL_BIN_DIR="$SCRIPT_DIR/pypy-pydrofoil-scripting-experimental/bin"
@@ -20,11 +22,12 @@ fi
 # check if the $1 string is empty
 # $0 is the script name.
 if [[ -z "$1" ]]; then
-    echo "Usage: $0 [-d|--debug] <config-file>"
+    echo "Usage: $0 [-d|--debug] <config-file> [extra sysc_vp args]"
     exit 1
 fi
 
 VP_CFG=$1
+shift # "$@" now holds the extra sysc_vp arguments
 
 if [[ -f "/configs/$VP_CFG" ]]; then
     VP_CFG="/configs/$VP_CFG"
@@ -44,9 +47,9 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:"$PYDROFOIL_BIN_DIR"
 if [[ "$DEBUG" == "1" ]]; then
     echo "Running in debug mode (gdb)…"
     if [[ ! -f "$VP_BENCHMARK"/gdb_vp_cmd.gdb ]]; then
-        gdb --args "$VP_BINARY" -f "$VP_CFG"
+        gdb --args "$VP_BINARY" -f "$VP_CFG" ${VP_EXTRA:-} "$@"
     else
-        gdb -x "$VP_BENCHMARK"/gdb_vp_cmd.gdb --args "$VP_BINARY" -f "$VP_CFG"
+        gdb -x "$VP_BENCHMARK"/gdb_vp_cmd.gdb --args "$VP_BINARY" -f "$VP_CFG" ${VP_EXTRA:-} "$@"
     fi
 else
     echo "Running normally…"
@@ -55,5 +58,5 @@ else
     # the config file. Used to sweep the TLM global quantum without
     # generating a config per benchmark per quantum:
     #   VP_EXTRA="-c system.quantum=1ms" ./launch.sh <cfg>
-    "$VP_BINARY" -f "$VP_CFG" ${VP_EXTRA:-}
+    "$VP_BINARY" -f "$VP_CFG" ${VP_EXTRA:-} "$@"
 fi

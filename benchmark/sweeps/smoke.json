@@ -1,0 +1,7 @@
+[
+    {"benchmark": "zephyr_is", "runs": 1, "timeout": 120,
+     "class": ["M"], "n_cores": [1, 2], "quantum": ["10us"],
+     "async": [false, true], "async_rate": [5]},
+    {"benchmark": "dhrystone", "runs": 1, "timeout": 120,
+     "n_cores": [2], "quantum": ["1us"], "async": [false]}
+]
