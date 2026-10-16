@@ -3,6 +3,8 @@
 
     python3 benchmark/benchmark.py benchmark/sweeps/zephyr_is.json
     python3 benchmark/benchmark.py benchmark/sweeps/smoke.json --dry-run
+    python3 benchmark/benchmark.py benchmark/sweeps/linux_npb.json \
+        --images <Pydrofoil-RISCV-benchmarks>/sw/images/buildroot
 
 A sweep file describes one or more blocks of parameters; every combination of
 the listed values is run 'runs' times:
@@ -35,6 +37,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MAX_HARTS = 8
 
 # Base config per benchmark; the sweep parameters are applied on top with -c.
+#   cfg:      config, relative to the repo; {images} is the --images directory
 #   elf:      per-run ELF (format string), None if fixed in the config
 #   apps:     benchmark has an "app" parameter (several programs in one image)
 #   rootfs:   Linux root filesystem; every run gets a fresh copy with the job
@@ -52,12 +55,13 @@ BENCHMARKS = {
         "finished": "cores have finished",
     },
     # NPB3.3-OMP under Linux (Pydrofoil-RISCV-benchmarks, package npb): app is
-    # the benchmark (is, ep, cg), class the NPB class, one OpenMP thread per hart
+    # the benchmark (is, ep, cg), class the NPB class, one OpenMP thread per
+    # hart. The config is the pydrofoil.cfg installed next to the images.
     "linux_npb": {
-        "cfg": "benchmark/linux/linux.cfg",
+        "cfg": "{images}/pydrofoil.cfg",
         "elf": None,
         "apps": True,
-        "rootfs": "../Pydrofoil-RISCV-benchmarks/sw/images/buildroot/rootfs.ext4",
+        "rootfs": "{images}/rootfs.ext4",
         "finished": re.compile(r"Verification\s*=\s*SUCCESSFUL"),
     },
 }
@@ -148,11 +152,17 @@ def job_file(run):
     return "NPB_BENCH=%s.%s\nOMP_NUM_THREADS=%s\n" % (run["app"], run["class"], run["n_cores"])
 
 
-def prepare_rootfs(run, tmp_dir):
-    """Fresh copy of the root filesystem with the job file in /etc."""
-    src = os.path.join(REPO, BENCHMARKS[run["benchmark"]]["rootfs"])
+def prepare_rootfs(run, src, tmp_dir):
+    """Fresh copy of the root filesystem src with the job file in /etc."""
     image = os.path.join(tmp_dir, "rootfs.ext4")
     shutil.copyfile(src, image)
+    # A Linux booted directly on src (simexit ends it without unmounting) leaves
+    # a dirty journal; replaying it at mount would undo the write below. So
+    # bring the copy into a clean state first (exit codes 1/2: fixed).
+    fsck = subprocess.run(["e2fsck", "-fy", image],
+                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if fsck.returncode >= 4:
+        raise RuntimeError("e2fsck failed on %s (%d)" % (image, fsck.returncode))
     job = os.path.join(tmp_dir, "npb_job")
     with open(job, "w") as f:
         f.write(job_file(run))
@@ -177,9 +187,9 @@ def parse(output):
     return res
 
 
-def execute(run, iteration, timeout, log_dir):
+def execute(run, iteration, timeout, log_dir, images):
     info = BENCHMARKS[run["benchmark"]]
-    cfg = info["cfg"]
+    cfg = info["cfg"].format(images=images)
     args = vp_args(run)
     elf = info["elf"]
     if elf:
@@ -189,10 +199,11 @@ def execute(run, iteration, timeout, log_dir):
 
     tmp_dir = None
     if info.get("rootfs"):
-        if not os.path.isfile(os.path.join(REPO, info["rootfs"])):
-            return {"status": "missing_rootfs", "exit_code": "", "log": info["rootfs"]}
+        rootfs = info["rootfs"].format(images=images)
+        if not os.path.isfile(rootfs):
+            return {"status": "missing_rootfs", "exit_code": "", "log": rootfs}
         tmp_dir = tempfile.mkdtemp(prefix="rootfs_", dir=os.path.dirname(log_dir))
-        args += ["-c", "system.virtio_blk.image=" + prepare_rootfs(run, tmp_dir)]
+        args += ["-c", "system.virtio_blk.image=" + prepare_rootfs(run, rootfs, tmp_dir)]
 
     name = "_".join(run[p] or "-" for p in PARAMS) + "_%d" % iteration
     log = os.path.join(log_dir, name + ".log")
@@ -240,7 +251,10 @@ def main():
     ap.add_argument("--retry-failed", action="store_true",
                     help="run again what is in the CSV with a status other than ok")
     ap.add_argument("--dry-run", action="store_true", help="only list the runs")
+    ap.add_argument("--images", help="directory with the Linux images and their pydrofoil.cfg "
+                    "(Pydrofoil-RISCV-benchmarks/sw/images/buildroot), needed for linux_npb")
     opts = ap.parse_args()
+    images = os.path.abspath(opts.images) if opts.images else None
 
     with open(opts.sweep) as f:
         blocks = json.load(f)
@@ -270,11 +284,20 @@ def main():
                 if tuple(run[p] for p in PARAMS) + (str(it),) not in done:
                     todo.append((run, it, block.get("timeout", 600)))
 
+    if any("{images}" in BENCHMARKS[run["benchmark"]]["cfg"] for run, _, _ in todo):
+        if not images:
+            sys.exit("this sweep runs Linux: give the image directory with --images "
+                     "(Pydrofoil-RISCV-benchmarks/sw/images/buildroot)")
+        if not os.path.isfile(os.path.join(images, "pydrofoil.cfg")):
+            sys.exit("%s has no pydrofoil.cfg: not a Linux image directory, or built before "
+                     "the config was installed next to the images" % images)
+
     print("%d runs to do, results in %s" % (len(todo), os.path.relpath(out)))
     if opts.dry_run:
         for run, it, _ in todo:
             print("  %s  #%d  ./launch.sh %s %s" % (" ".join("%s=%s" % (p, run[p]) for p in PARAMS[1:] if run[p]),
-                                                  it, BENCHMARKS[run["benchmark"]]["cfg"], " ".join(vp_args(run))))
+                                                  it, BENCHMARKS[run["benchmark"]]["cfg"].format(images=images),
+                                                  " ".join(vp_args(run))))
         return
 
     os.makedirs(log_dir, exist_ok=True)
@@ -286,7 +309,7 @@ def main():
     for k, (run, it, timeout) in enumerate(todo, 1):
         desc = " ".join("%s=%s" % (p, run[p]) for p in PARAMS if run[p])
         print("[%d/%d] %s #%d ... " % (k, len(todo), desc, it), end="", flush=True)
-        res = execute(run, it, timeout, log_dir)
+        res = execute(run, it, timeout, log_dir, images)
         print("%s  %ss  benchmark_time=%s" % (res["status"], res.get("wall_time", "-"),
                                              res.get("benchmark_time", "-") or "-"))
         row = dict(run, iteration=it, timestamp=datetime.datetime.now().isoformat(timespec="seconds"),

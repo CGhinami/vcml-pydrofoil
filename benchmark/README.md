@@ -4,13 +4,20 @@
 |---|---|---|
 | Zephyr SMP, NAS IS | `zephyr_is/zephyr_is.cfg` | `zephyr_is/build/zephyr_is_<class>_<n>cores.elf`, built by `zephyr_tests/build_is.sh` |
 | Dhrystone, one instance per core (baremetal) | `dhrystone_multicore/dhrystone.cfg` | `dhrystone_multicore/build/dhrystone_core<i>.riscv`, built by riscv-tests (`multicore_test/dhrystone`) |
-| Linux (1/2/4/8 harts), NPB3.3-OMP BT / CG / EP / FT / IS / LU / MG / SP | `linux/linux.cfg` | `Pydrofoil-RISCV-benchmarks/sw/images/buildroot/`, built by `sw/linux/build_linux.sh` (package `npb`) |
+| Linux (1/2/4/8 harts), NPB3.3-OMP BT / CG / EP / FT / IS / LU / MG / SP | `pydrofoil.cfg` next to the images | `Pydrofoil-RISCV-benchmarks/sw/images/buildroot/`, built by `sw/linux/build_linux.sh` (package `npb`) |
 
 Every config runs on its own and takes overrides after it:
 
 ```bash
 ./launch.sh benchmark/zephyr_is/zephyr_is.cfg -c system.ncores=4 \
     -c elf=benchmark/zephyr_is/build/zephyr_is_W_4cores.elf -c system.quantum=100us
+```
+
+The Linux config is not in this repo but installed by the image build next to
+the images, so it always matches them (all paths in it are relative to it):
+
+```bash
+./launch.sh <Pydrofoil-RISCV-benchmarks>/sw/images/buildroot/pydrofoil.cfg -c system.ncores=4
 ```
 
 ## Sweeps
@@ -22,6 +29,8 @@ appends one line per run to `results/<sweep>.csv` (the log of each run goes to
 ```bash
 python3 benchmark/benchmark.py benchmark/sweeps/smoke.json --dry-run   # list the runs
 python3 benchmark/benchmark.py benchmark/sweeps/zephyr_is.json
+python3 benchmark/benchmark.py benchmark/sweeps/linux_npb.json \
+    --images <Pydrofoil-RISCV-benchmarks>/sw/images/buildroot
 ```
 
 ```json
@@ -43,7 +52,8 @@ python3 benchmark/benchmark.py benchmark/sweeps/zephyr_is.json
   (`-dirty` when `sysc_vp/` or `gluecode.py` had uncommitted changes).
 - Zephyr IS on several cores with `async=true` is not reliable before the
   atomics are handled in Pydrofoil (runs can hang, see the timeout).
-- `linux_npb`: `app` is the NPB benchmark (`bt`, `cg`, `ep`, `ft`, `is`, `lu`,
+- `linux_npb` needs `--images`, the image directory; config and `rootfs.ext4`
+  are taken from there. `app` is the NPB benchmark (`bt`, `cg`, `ep`, `ft`, `is`, `lu`,
   `mg`, `sp`), `class` the NPB
   class (`S`, `W`), one OpenMP thread per hart. Every run boots Linux from a
   fresh copy of `rootfs.ext4` with `/etc/npb_job` written into it (`debugfs`),
