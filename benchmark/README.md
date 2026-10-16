@@ -4,6 +4,7 @@
 |---|---|---|
 | Zephyr SMP, NAS IS | `zephyr_is/zephyr_is.cfg` | `zephyr_is/build/zephyr_is_<class>_<n>cores.elf`, built by `zephyr_tests/build_is.sh` |
 | Dhrystone, one instance per core (baremetal) | `dhrystone_multicore/dhrystone.cfg` | `dhrystone_multicore/build/dhrystone_core<i>.riscv`, built by riscv-tests (`multicore_test/dhrystone`) |
+| Linux (1/2/4/8 harts), NPB3.3-OMP BT / CG / EP / FT / IS / LU / MG / SP | `linux/linux.cfg` | `Pydrofoil-RISCV-benchmarks/sw/images/buildroot/`, built by `sw/linux/build_linux.sh` (package `npb`) |
 
 Every config runs on its own and takes overrides after it:
 
@@ -42,6 +43,14 @@ python3 benchmark/benchmark.py benchmark/sweeps/zephyr_is.json
   (`-dirty` when `sysc_vp/` or `gluecode.py` had uncommitted changes).
 - Zephyr IS on several cores with `async=true` is not reliable before the
   atomics are handled in Pydrofoil (runs can hang, see the timeout).
+- `linux_npb`: `app` is the NPB benchmark (`bt`, `cg`, `ep`, `ft`, `is`, `lu`,
+  `mg`, `sp`), `class` the NPB
+  class (`S`, `W`), one OpenMP thread per hart. Every run boots Linux from a
+  fresh copy of `rootfs.ext4` with `/etc/npb_job` written into it (`debugfs`),
+  the init script `S98npb` runs the benchmark, then `simexit` ends the
+  simulation. `benchmark_time` is the host time of the benchmark alone (simdev
+  `hclk` before/after), `guest_time` NPB's own "Time in seconds" (simulated
+  time), status `ok` needs "Verification = SUCCESSFUL".
 
 ## Plots
 

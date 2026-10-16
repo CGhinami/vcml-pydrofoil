@@ -1,0 +1,6 @@
+[
+    {"benchmark": "linux_npb", "runs": 1, "timeout": 3600,
+     "app": ["bt", "cg", "ep", "ft", "is", "lu", "mg", "sp"],
+     "class": ["S", "W"], "n_cores": [2, 4, 8],
+     "quantum": ["100us"], "async": [false]}
+]

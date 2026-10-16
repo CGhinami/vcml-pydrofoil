@@ -24,29 +24,47 @@ import itertools
 import json
 import os
 import re
+import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MAX_HARTS = 8
 
-# Base config per benchmark; the sweep parameters are applied on top with -c
+# Base config per benchmark; the sweep parameters are applied on top with -c.
+#   elf:      per-run ELF (format string), None if fixed in the config
+#   apps:     benchmark has an "app" parameter (several programs in one image)
+#   rootfs:   Linux root filesystem; every run gets a fresh copy with the job
+#             file written into it (see job_file())
+#   finished: output that marks a successful run
 BENCHMARKS = {
     "zephyr_is": {
         "cfg": "benchmark/zephyr_is/zephyr_is.cfg",
         "elf": "benchmark/zephyr_is/build/zephyr_is_{cls}_{n_cores}cores.elf",
+        "finished": "cores have finished",
     },
     "dhrystone": {
         "cfg": "benchmark/dhrystone_multicore/dhrystone.cfg",
         "elf": None,  # fixed set of per-core ELFs in the config
+        "finished": "cores have finished",
+    },
+    # NPB3.3-OMP under Linux (Pydrofoil-RISCV-benchmarks, package npb): app is
+    # the benchmark (is, ep, cg), class the NPB class, one OpenMP thread per hart
+    "linux_npb": {
+        "cfg": "benchmark/linux/linux.cfg",
+        "elf": None,
+        "apps": True,
+        "rootfs": "../Pydrofoil-RISCV-benchmarks/sw/images/buildroot/rootfs.ext4",
+        "finished": re.compile(r"Verification\s*=\s*SUCCESSFUL"),
     },
 }
 
-PARAMS = ["benchmark", "class", "n_cores", "quantum", "async", "async_rate"]
+PARAMS = ["benchmark", "app", "class", "n_cores", "quantum", "async", "async_rate"]
 RESULTS = ["status", "exit_code", "wall_time", "duration", "runtime",
-           "benchmark_time", "instructions", "mips"]
+           "benchmark_time", "guest_time", "mops", "instructions", "mips"]
 HARTS = ["insns_hart%d" % i for i in range(MAX_HARTS)]
 COLUMNS = ["timestamp", "vp_commit"] + PARAMS + ["iteration"] + RESULTS + HARTS + ["log"]
 
@@ -59,7 +77,20 @@ PATTERNS = {
     "mips": re.compile(r"\]\s+sim speed\s*:\s*([\d.]+)\s*MIPS"),
 }
 HART_PATTERN = re.compile(r"\]\s+hart (\d+)\s*:\s*(\d+)")
-FINISHED = "cores have finished"
+
+# Printed by NPB and by the S98npb init script in the guest
+NPB_PATTERNS = {
+    "guest_time": re.compile(r"Time in seconds\s*=\s*([\d.]+)"),
+    "mops": re.compile(r"Mop/s total\s*=\s*([\d.]+)"),
+}
+HCLK_START = re.compile(r"NPB_HCLK_START=(\d+)")
+HCLK_END = re.compile(r"NPB_HCLK_END=(\d+)")
+
+
+def values(block, name, default):
+    """A sweep parameter as a list; a single value counts as a list of one."""
+    v = block.get(name, default)
+    return list(v) if isinstance(v, (list, tuple)) else [v]
 
 
 def expand(block):
@@ -67,13 +98,19 @@ def expand(block):
     bench = block["benchmark"]
     if bench not in BENCHMARKS:
         sys.exit("unknown benchmark '%s', known: %s" % (bench, ", ".join(BENCHMARKS)))
+    for name in ("n_cores", "quantum"):
+        if name not in block:
+            sys.exit("sweep block for '%s' needs '%s'" % (bench, name))
 
-    classes = block.get("class", [""]) if BENCHMARKS[bench]["elf"] else [""]
+    info = BENCHMARKS[bench]
+    classes = values(block, "class", "") if info["elf"] or info.get("apps") else [""]
+    apps = values(block, "app", "") if info.get("apps") else [""]
     seen = set()
-    for cls, n, q, a, rate in itertools.product(classes, block["n_cores"], block["quantum"],
-                                                block.get("async", [False]),
-                                                block.get("async_rate", [5])):
-        run = {"benchmark": bench, "class": cls, "n_cores": str(n), "quantum": q,
+    for app, cls, n, q, a, rate in itertools.product(apps, classes, values(block, "n_cores", None),
+                                                     values(block, "quantum", None),
+                                                     values(block, "async", False),
+                                                     values(block, "async_rate", 5)):
+        run = {"benchmark": bench, "app": app, "class": cls, "n_cores": str(n), "quantum": q,
                "async": str(bool(a)).lower(), "async_rate": str(rate) if a else ""}
         key = tuple(run[p] for p in PARAMS)
         if key not in seen:
@@ -106,11 +143,32 @@ def vp_commit():
         return "unknown"
 
 
+def job_file(run):
+    """/etc/npb_job for the S98npb init script in the guest."""
+    return "NPB_BENCH=%s.%s\nOMP_NUM_THREADS=%s\n" % (run["app"], run["class"], run["n_cores"])
+
+
+def prepare_rootfs(run, tmp_dir):
+    """Fresh copy of the root filesystem with the job file in /etc."""
+    src = os.path.join(REPO, BENCHMARKS[run["benchmark"]]["rootfs"])
+    image = os.path.join(tmp_dir, "rootfs.ext4")
+    shutil.copyfile(src, image)
+    job = os.path.join(tmp_dir, "npb_job")
+    with open(job, "w") as f:
+        f.write(job_file(run))
+    subprocess.run(["debugfs", "-w", "-R", "write %s /etc/npb_job" % job, image],
+                   check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return image
+
+
 def parse(output):
     res = {}
-    for name, pattern in PATTERNS.items():
+    for name, pattern in list(PATTERNS.items()) + list(NPB_PATTERNS.items()):
         m = pattern.search(output)
         res[name] = m.group(1) if m else ""
+    start, end = HCLK_START.search(output), HCLK_END.search(output)
+    if start and end:
+        res["benchmark_time"] = "%.4f" % ((int(end.group(1)) - int(start.group(1))) / 1e6)
     for hart, insns in HART_PATTERN.findall(output):
         res["insns_hart" + hart] = insns
     # Single core: the VP prints no per-hart line
@@ -120,13 +178,21 @@ def parse(output):
 
 
 def execute(run, iteration, timeout, log_dir):
-    cfg = BENCHMARKS[run["benchmark"]]["cfg"]
+    info = BENCHMARKS[run["benchmark"]]
+    cfg = info["cfg"]
     args = vp_args(run)
-    elf = BENCHMARKS[run["benchmark"]]["elf"]
+    elf = info["elf"]
     if elf:
         path = os.path.join(REPO, elf.format(cls=run["class"], n_cores=run["n_cores"]))
         if not os.path.isfile(path):
             return {"status": "missing_elf", "exit_code": "", "log": path}
+
+    tmp_dir = None
+    if info.get("rootfs"):
+        if not os.path.isfile(os.path.join(REPO, info["rootfs"])):
+            return {"status": "missing_rootfs", "exit_code": "", "log": info["rootfs"]}
+        tmp_dir = tempfile.mkdtemp(prefix="rootfs_", dir=os.path.dirname(log_dir))
+        args += ["-c", "system.virtio_blk.image=" + prepare_rootfs(run, tmp_dir)]
 
     name = "_".join(run[p] or "-" for p in PARAMS) + "_%d" % iteration
     log = os.path.join(log_dir, name + ".log")
@@ -147,15 +213,19 @@ def execute(run, iteration, timeout, log_dir):
             rc = proc.wait()
             status = "timeout"
     wall = time.monotonic() - start
+    if tmp_dir:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
 
     with open(log, errors="replace") as f:
         output = f.read()
     res = parse(output)
+    finished = info["finished"]
+    ok = finished.search(output) if hasattr(finished, "search") else finished in output
     if status is None:
         if rc != 0:
             status = "crash"
-        elif FINISHED not in output:
-            status = "unfinished"  # e.g. system.duration reached
+        elif not ok:
+            status = "unfinished"  # e.g. system.duration reached, verification failed
         else:
             status = "ok"
     res.update({"status": status, "exit_code": rc, "wall_time": "%.2f" % wall,
@@ -184,9 +254,14 @@ def main():
     done = set()
     if os.path.isfile(out):
         with open(out, newline="") as f:
+            header = next(csv.reader(f), [])
+        if header != COLUMNS:
+            sys.exit("%s has different columns (written by an older benchmark.py): delete or "
+                 "rename it, or write to another file with --out" % out)
+        with open(out, newline="") as f:
             for row in csv.DictReader(f):
                 if row["status"] == "ok" or not opts.retry_failed:
-                    done.add(tuple(row[p] for p in PARAMS) + (row["iteration"],))
+                    done.add(tuple(row.get(p, "") for p in PARAMS) + (row["iteration"],))
 
     todo = []
     for block in blocks:

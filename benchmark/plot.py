@@ -4,7 +4,7 @@
     python3 benchmark/plot.py results/zephyr_is.csv
     python3 benchmark/plot.py results/zephyr_is.csv --metric mips --show
 
-One figure per benchmark (and IS class): x = number of cores, y = metric,
+One figure per benchmark (and app / class): x = number of cores, y = metric,
 colour = quantum, marker = sync / async rate. The mean over the iterations is
 plotted with the standard deviation as error bars. Only runs with status ok
 are used. Figures go to results/plots/ next to the CSV (or --out-dir).
@@ -58,6 +58,7 @@ def main():
     df["async_rate"] = df["async_rate"].fillna(0).astype(int)
     df["mode"] = df.apply(mode, axis=1)
     df["class"] = df["class"].fillna("")
+    df["app"] = df["app"].fillna("") if "app" in df else ""
 
     metric = opts.metric
     if metric == "benchmark_time":
@@ -79,8 +80,8 @@ def main():
     os.makedirs(out_dir, exist_ok=True)
     sns.set_theme(style="whitegrid")
 
-    for (bench, cls), data in df.groupby(["benchmark", "class"]):
-        title = bench + (" class %s" % cls if cls else "")
+    for (bench, app, cls), data in df.groupby(["benchmark", "app", "class"]):
+        title = bench + (" %s" % app if app else "") + (" class %s" % cls if cls else "")
         fig, ax = plt.subplots(figsize=(10, 6))
         sns.lineplot(data=data, x="n_cores", y="value", hue="quantum",
                      hue_order=[q for q in quanta if q in set(data["quantum"])],
@@ -98,7 +99,7 @@ def main():
         ax.legend(bbox_to_anchor=(1.02, 1), loc="upper left", borderaxespad=0)
         fig.tight_layout()
 
-        name = "%s%s_%s.png" % (bench, "_" + cls if cls else "", metric)
+        name = "%s%s%s_%s.png" % (bench, "_" + app if app else "", "_" + cls if cls else "", metric)
         path = os.path.join(out_dir, name)
         fig.savefig(path, dpi=200, bbox_inches="tight")
         print("wrote", os.path.relpath(path))
