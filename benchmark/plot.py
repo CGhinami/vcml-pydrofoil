@@ -25,11 +25,14 @@ LABELS = {
     "duration": "Simulated time (s)",
     "mips": "Simulation speed (MIPS)",
     "instructions": "Instructions (all harts)",
+    "max_rss_mb": "Peak memory (MiB, RSS of the VP)",
 }
 
 
 def mode(row):
-    return "sync" if row["async"] is False else "async, rate %d" % row["async_rate"]
+    m = "sync" if row["async"] is False else "async, rate %d" % row["async_rate"]
+    # shared Pydrofoil (one interpreter for all harts) is its own line
+    return m + ", shared" if str(row.get("shared", "false")).lower() == "true" else m
 
 
 def main():

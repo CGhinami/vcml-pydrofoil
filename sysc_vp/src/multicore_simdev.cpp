@@ -45,9 +45,12 @@ void multicore_simdev::write_sout1(u32 val) {
 }
 
 u64 multicore_simdev::read_hclk() {
-    double time = mwr::timestamp(); 
+    double time = mwr::timestamp();
     // vcml::log_info("  runtime        : %.4fs", time);
-    last_queried_time = time;
+    // only the first read marks the benchmark start: with several cores every
+    // core reads hclk before its benchmark, the earliest one counts
+    if(first_queried_time == 0.0)
+        first_queried_time = time;
     return time;
 }
 
@@ -61,7 +64,7 @@ multicore_simdev::multicore_simdev(const sc_module_name& nm, unsigned int num_co
     sout1("sout1", 0x0C, 0), // <-- Initialisiere Core 1 Output (4 Byte weiter!)
     hclk("hclk", 0x20, 0),
     in("in"),
-    last_queried_time(0.0)
+    first_queried_time(0.0)
 {
     // Configure registers
     core_done.allow_read_write();

@@ -44,7 +44,7 @@ private:
     virtual ~multicore_simdev();
     
     VCML_KIND(multicore_simdev);
-    double last_queried_time;
+    double first_queried_time;
 
     virtual void reset() override;
 };

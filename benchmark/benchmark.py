@@ -91,9 +91,10 @@ BENCHMARKS = {
 }
 
 PARAMS = ["benchmark", "app", "class", "n_cores", "quantum", "async", "async_rate", "shared"]
-OLD_COLUMNS_MISSING = {"shared": "false"}  # columns added later and their value in old rows
+# columns added later and their value in old rows
+OLD_COLUMNS_MISSING = {"shared": "false", "max_rss_mb": ""}
 RESULTS = ["status", "exit_code", "wall_time", "duration", "runtime",
-           "benchmark_time", "guest_time", "mops", "instructions", "mips"]
+           "benchmark_time", "guest_time", "mops", "instructions", "mips", "max_rss_mb"]
 HARTS = ["insns_hart%d" % i for i in range(MAX_HARTS)]
 COLUMNS = ["timestamp", "vp_commit"] + PARAMS + ["iteration"] + RESULTS + HARTS + ["log"]
 
@@ -242,6 +243,20 @@ def parse(output):
     return res
 
 
+def wait_rss(proc, timeout):
+    """proc.wait(timeout) that also returns the peak RSS in MiB of proc and the
+    children it waited for (launch.sh waits for sysc_vp, so this is the VP's)."""
+    deadline = time.monotonic() + timeout
+    while True:
+        pid, status, usage = os.wait4(proc.pid, os.WNOHANG)
+        if pid:
+            proc.returncode = os.waitstatus_to_exitcode(status)
+            return proc.returncode, usage.ru_maxrss / 1024  # ru_maxrss is in KiB
+        if time.monotonic() > deadline:
+            raise subprocess.TimeoutExpired(proc.args, timeout)
+        time.sleep(0.05)
+
+
 def execute(run, iteration, timeout, log_dir, inputs):
     info = BENCHMARKS[run["benchmark"]]
     cfg = base_cfg(run, inputs)
@@ -269,10 +284,13 @@ def execute(run, iteration, timeout, log_dir, inputs):
         # own process group, so a timeout also stops sysc_vp below launch.sh
         proc = subprocess.Popen(cmd, cwd=REPO, stdout=f, stderr=subprocess.STDOUT,
                                 start_new_session=True)
+        max_rss = ""
         try:
-            rc = proc.wait(timeout=timeout)
+            rc, rss = wait_rss(proc, timeout)
+            max_rss = "%.1f" % rss
             status = None
         except subprocess.TimeoutExpired:
+            # launch.sh is killed before it waits for sysc_vp: no peak RSS
             os.killpg(proc.pid, signal.SIGKILL)
             rc = proc.wait()
             status = "timeout"
@@ -293,7 +311,7 @@ def execute(run, iteration, timeout, log_dir, inputs):
         else:
             status = "ok"
     res.update({"status": status, "exit_code": rc, "wall_time": "%.2f" % wall,
-                "log": os.path.relpath(log, REPO)})
+                "max_rss_mb": max_rss, "log": os.path.relpath(log, REPO)})
     return res
 
 
@@ -386,8 +404,9 @@ def main():
         desc = " ".join("%s=%s" % (p, run[p]) for p in PARAMS if run[p])
         print("[%d/%d] %s #%d ... " % (k, len(todo), desc, it), end="", flush=True)
         res = execute(run, it, timeout, log_dir, inputs)
-        print("%s  %ss  benchmark_time=%s" % (res["status"], res.get("wall_time", "-"),
-                                             res.get("benchmark_time", "-") or "-"))
+        print("%s  %ss  benchmark_time=%s  max_rss=%sMiB" % (res["status"], res.get("wall_time", "-"),
+                                                            res.get("benchmark_time", "-") or "-",
+                                                            res.get("max_rss_mb", "-") or "-"))
         row = dict(run, iteration=it, timestamp=datetime.datetime.now().isoformat(timespec="seconds"),
                    vp_commit=commit, **res)
         with open(out, "a", newline="") as f:

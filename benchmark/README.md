@@ -66,10 +66,13 @@ top-level README).
 - `status`: `ok`, `timeout` (killed after `timeout` seconds), `crash` (non-zero
   exit), `unfinished` (ended without all cores reporting done, e.g.
   `system.duration`), `missing_elf`.
-- `benchmark_time` is the wall clock time since the guest read
-  `multicore_simdev.hclk` (start of the measured part, Zephyr IS only),
+- `benchmark_time` is the wall clock time since the guest first read
+  `multicore_simdev.hclk` (start of the measured part, Zephyr IS and
+  Dhrystone; with several cores the earliest core counts),
   `runtime` the wall clock time of the whole simulation, `duration` the
-  simulated time. `vp_commit` is the VP version the run was made with
+  simulated time. `max_rss_mb` is the peak resident memory of the VP process
+  in MiB (`ru_maxrss` from `wait4`, empty for `timeout`; rows from before the
+  column existed get it empty). `vp_commit` is the VP version the run was made with
   (`-dirty` when `sysc_vp/` or `gluecode.py` had uncommitted changes).
 - Zephyr IS on several cores with `async=true` is not reliable before the
   atomics are handled in Pydrofoil (runs can hang, see the timeout).

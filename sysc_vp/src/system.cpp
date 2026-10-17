@@ -175,9 +175,9 @@ int system::run()
     }
     vcml::log_info("  sim speed      : %.1f MIPS", mips);
     vcml::log_info("  realtime ratio : %.2f / 1s", realtime == 0.0 ? 0.0 : realtime / duration);
-    // wall-clock time since the guest last read multicore_simdev.hclk (benchmark start)
-    if(m_multicore_simdev.last_queried_time > 0.0)
-        vcml::log_info("  benchmark time : %.4fs", mwr::timestamp() - m_multicore_simdev.last_queried_time);
+    // wall-clock time since the guest first read multicore_simdev.hclk (benchmark start)
+    if(m_multicore_simdev.first_queried_time > 0.0)
+        vcml::log_info("  benchmark time : %.4fs", mwr::timestamp() - m_multicore_simdev.first_queried_time);
     vcml::log_info("  slowpath reads : %llu", (unsigned long long) g_slowpath_read_count.load());
     vcml::log_info("  slowpath writes: %llu", (unsigned long long) g_slowpath_write_count.load());
 
