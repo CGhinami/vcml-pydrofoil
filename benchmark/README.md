@@ -1,16 +1,22 @@
 # Benchmarks
 
-| Benchmark | Config | ELFs |
-|---|---|---|
-| Zephyr SMP, NAS IS | `zephyr_is/zephyr_is.cfg` | `zephyr_is/build/zephyr_is_<class>_<n>cores.elf`, built by `zephyr_tests/build_is.sh` |
-| Dhrystone, one instance per core (baremetal) | `dhrystone_multicore/dhrystone.cfg` | `dhrystone_multicore/build/dhrystone_core<i>.riscv`, built by riscv-tests (`multicore_test/dhrystone`) |
-| Linux (1/2/4/8 harts), NPB3.3-OMP BT / CG / EP / FT / IS / LU / MG / SP | `pydrofoil.cfg` next to the images | `Pydrofoil-RISCV-benchmarks/sw/images/buildroot/`, built by `sw/linux/build_linux.sh` (package `npb`) |
+The inputs (ELFs, Linux images) stay where their projects build them; nothing
+is copied into this repo.
 
-Every config runs on its own and takes overrides after it:
+| Benchmark | Config | Inputs, built by | `benchmark.py` option |
+|---|---|---|---|
+| Zephyr SMP, NAS IS | `zephyr_is/zephyr_is.cfg` | `zephyr_tests/benchmark/build_is/zephyr_is_<class>_<n>cores.elf`, `zephyr_tests/build_is.sh` | `--zephyr-elfs` |
+| Dhrystone, one instance per core (baremetal) | `dhrystone_multicore/dhrystone.cfg` | `multicore_test/dhrystone/benchmarks/dhrystone_core<i>.riscv`, riscv-tests | `--dhrystone-elfs` |
+| Linux (1/2/4/8 harts), NPB3.3-OMP BT / CG / EP / FT / IS / LU / MG / SP | `pydrofoil.cfg` next to the images | `Pydrofoil-RISCV-benchmarks/sw/images/buildroot/`, `sw/linux/build_linux.sh` (package `npb`) | `--images` |
+
+Every config runs on its own and takes overrides after it (`elf` / `elfdir`
+point to the inputs):
 
 ```bash
 ./launch.sh benchmark/zephyr_is/zephyr_is.cfg -c system.ncores=4 \
-    -c elf=benchmark/zephyr_is/build/zephyr_is_W_4cores.elf -c system.quantum=100us
+    -c elf=<zephyr_tests>/benchmark/build_is/zephyr_is_W_4cores.elf -c system.quantum=100us
+./launch.sh benchmark/dhrystone_multicore/dhrystone.cfg -c system.ncores=4 \
+    -c elfdir=<multicore_test>/dhrystone/benchmarks
 ```
 
 The Linux config is not in this repo but installed by the image build next to
@@ -27,11 +33,18 @@ appends one line per run to `results/<sweep>.csv` (the log of each run goes to
 `results/logs/<sweep>/`):
 
 ```bash
-python3 benchmark/benchmark.py benchmark/sweeps/smoke.json --dry-run   # list the runs
-python3 benchmark/benchmark.py benchmark/sweeps/zephyr_is.json
+python3 benchmark/benchmark.py benchmark/sweeps/zephyr_is.json \
+    --zephyr-elfs <zephyr_tests>/benchmark/build_is
+python3 benchmark/benchmark.py benchmark/sweeps/dhrystone.json \
+    --dhrystone-elfs <multicore_test>/dhrystone/benchmarks
 python3 benchmark/benchmark.py benchmark/sweeps/linux_npb.json \
     --images <Pydrofoil-RISCV-benchmarks>/sw/images/buildroot
 ```
+
+`--dry-run` only lists the runs. A sweep needs the options of the benchmarks it
+contains (`smoke.json`: `--zephyr-elfs` and `--dhrystone-elfs`). In the
+container: `./container_run_benchmark.sh` with the same arguments (see the
+top-level README).
 
 ```json
 [{"benchmark": "zephyr_is", "runs": 3, "timeout": 1800,
@@ -40,6 +53,14 @@ python3 benchmark/benchmark.py benchmark/sweeps/linux_npb.json \
 ```
 
 - `async_rate` only applies to `async=true`.
+- `"shared": [false, true]` runs the harts in one shared Pydrofoil
+  interpreter (`system.core<i>.shared_pydrofoil=true`) instead of one per hart
+  (`dlmopen`). It needs `async=false`, combinations with `async=true` are
+  skipped. Note: with the current Pydrofoil build the harts of a shared
+  interpreter also see each other's interrupt lines, so only workloads without
+  interrupts (Dhrystone) run correctly in it.
+- A CSV written before the `shared` column existed gets it added
+  (`shared=false`, the old file is kept as `.bak`).
 - Runs already in the CSV are skipped, an interrupted sweep continues where it
   stopped. `--retry-failed` runs again what did not finish with `ok`.
 - `status`: `ok`, `timeout` (killed after `timeout` seconds), `crash` (non-zero

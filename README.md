@@ -98,6 +98,17 @@ cd ~/vcml-pydrofoil
 ./container_run_simulation.sh <path to custom .cfg file>
 ```
 
+### Benchmarks in the container
+
+[container_run_benchmark.sh](container_run_benchmark.sh) runs [benchmark/benchmark.py](benchmark/benchmark.py) in the image. The VP comes from the image; the host's `benchmark/` (sweeps, configs) is mounted over it and `results/` is mounted writable, so the CSV and the logs end up on the host. All options are passed on to `benchmark.py`; the input folders (`--zephyr-elfs`, `--dhrystone-elfs`, `--images`, see [benchmark/README.md](benchmark/README.md)) are mounted and rewritten:
+```bash
+./container_run_benchmark.sh benchmark/sweeps/dhrystone.json \
+    --dhrystone-elfs ../multicore_test/dhrystone/benchmarks
+./container_run_benchmark.sh podman benchmark/sweeps/linux_npb.json \
+    --images ../Pydrofoil-RISCV-benchmarks/sw/images/buildroot
+```
+The image contains the Pydrofoil plugin that was in `pypy-pydrofoil-scripting-experimental/` when it was built (`build_image.sh`); after replacing the plugin, build the image again.
+
 *Note:*
 The simulator supports RTOS and bare-metal and Linux applications. The current simulator has only few peripherals connected, but the RISCV-compatible peripherals from [VCML](https://github.com/machineware-gmbh/vcml) are supported. To add them, modify the files where the peripherals are instantiated and connected ([system.cpp](sysc_vp/src/system.cpp) and [system.h](sysc_vp/include/system.h)).
 

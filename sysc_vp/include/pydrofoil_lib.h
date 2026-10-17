@@ -38,10 +38,15 @@ namespace backend {
     X(pydrofoil_cpu_set_ram_read_write_callback) \
     X(pydrofoil_cpu_set_dma_region)
 
-// One private copy of libpydrofoilcapi_cffi.so (and with it of the whole PyPy
-// runtime) per hart. dlmopen() loads it into a new link-map namespace, so the
-// harts share no interpreter, no GIL and no gluecode globals and can run in
-// parallel threads (async=true).
+// By default one private copy of libpydrofoilcapi_cffi.so (and with it of the
+// whole PyPy runtime) per hart. dlmopen() loads it into a new link-map
+// namespace, so the harts share no interpreter, no GIL and no gluecode globals
+// and can run in parallel threads (async=true).
+//
+// Shared: dlopen() instead, which hands every hart the same, already loaded
+// library, so all of them live in one interpreter as separate cpu objects of
+// the gluecode. Only one hart at a time can execute then (one GIL), which is
+// what async=false does anyway; it saves one PyPy runtime per hart.
 struct PydrofoilLib {
     void* handle = nullptr;
 
@@ -55,7 +60,7 @@ struct PydrofoilLib {
     ~PydrofoilLib();
 
     // Returns an error message, empty on success
-    std::string load(const std::string& path);
+    std::string load(const std::string& path, bool shared = false);
 };
 
 } // namespace backend

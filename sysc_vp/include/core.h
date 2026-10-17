@@ -57,6 +57,9 @@ class PydrofoilCore : public vcml::processor {
     vcml::property<std::string> mem_dump;
     // the libpydrofoilcapi_cffi.so this hart loads its private copy from
     vcml::property<std::string> pydrofoil_lib;
+    // true: no private copy, the hart runs in the one PyPy interpreter shared
+    // by all harts with shared_pydrofoil=true (see PydrofoilLib); async=false only
+    vcml::property<bool> shared_pydrofoil;
 
     PydrofoilCore(const sc_core::sc_module_name& name, uint64_t hart_id = 0);
     virtual ~PydrofoilCore();

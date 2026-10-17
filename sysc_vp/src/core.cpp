@@ -22,6 +22,7 @@ PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name, uint64_t hart_
     htif_tohost("htif_tohost", 0),
     mem_dump("mem_dump", ""),
     pydrofoil_lib("pydrofoil_lib", PYDROFOIL_CAPI_LIB),
+    shared_pydrofoil("shared_pydrofoil", false),
     hart_id(hart_id),
     cpu(nullptr),
     use_dmi(true),
@@ -34,8 +35,14 @@ PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name, uint64_t hart_
     mwr::log_info("Running with arch: %d bit", 8 * core_arch.word_size());
     set_little_endian(); // Otherwise the gdbserver inverts the bytes it reads
 
-    std::string err = lib.load(pydrofoil_lib.get());
+    // One interpreter means one GIL: async harts would silently run one after
+    // the other instead of in parallel
+    VCML_ERROR_ON(shared_pydrofoil && async, "hart %lu: shared_pydrofoil needs async=false",
+                  (unsigned long)hart_id);
+    std::string err = lib.load(pydrofoil_lib.get(), shared_pydrofoil);
     VCML_ERROR_ON(!err.empty(), "hart %lu: %s", (unsigned long)hart_id, err.c_str());
+    if(shared_pydrofoil)
+        mwr::log_info("hart %lu: shared Pydrofoil interpreter", (unsigned long)hart_id);
 
     python_worker_thread = std::thread(&PydrofoilCore::python_worker_loop, this);
 

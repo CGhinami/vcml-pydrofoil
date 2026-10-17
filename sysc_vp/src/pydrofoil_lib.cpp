@@ -12,11 +12,15 @@
 
 namespace backend {
 
-std::string PydrofoilLib::load(const std::string& path)
+std::string PydrofoilLib::load(const std::string& path, bool shared)
 {
-    handle = dlmopen(LM_ID_NEWLM, path.c_str(), RTLD_NOW | RTLD_LOCAL);
+    // dlopen() of an already loaded library only bumps its reference count
+    if(shared)
+        handle = dlopen(path.c_str(), RTLD_NOW | RTLD_LOCAL);
+    else
+        handle = dlmopen(LM_ID_NEWLM, path.c_str(), RTLD_NOW | RTLD_LOCAL);
     if(handle == nullptr)
-        return std::string("dlmopen failed: ") + dlerror();
+        return std::string(shared ? "dlopen" : "dlmopen") + " failed: " + dlerror();
 
 #define PYDROFOIL_LIB_SYM(fn)                                        \
     fn = reinterpret_cast<decltype(fn)>(dlsym(handle, #fn));         \

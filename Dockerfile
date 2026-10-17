@@ -15,8 +15,11 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     libffi-dev \
     libgmp-dev \
-    zlib1g-dev
-    
+    zlib1g-dev \
+    e2fsprogs
+# e2fsprogs: benchmark.py writes the job file into a copy of the Linux rootfs
+# (debugfs, e2fsck)
+
 # Copy everything to the working directory
 WORKDIR /vcml-pydrofoil
 COPY . .
@@ -44,6 +47,10 @@ RUN ./build_sim.sh
 ENV LD_LIBRARY_PATH=/vcml-pydrofoil/pypy-pydrofoil-scripting-experimental/bin:/vcml-pydrofoil:/vcml-pydrofoil/build:/vcml-pydrofoil/sysc_vp:${LD_LIBRARY_PATH:-}
 
 RUN chmod +x launch.sh
+
+# benchmark.py records the VP commit; the container runs as the host user,
+# who does not own the copied repository
+RUN git config --system --add safe.directory /vcml-pydrofoil
 
 # We're going to be using the absolute path, since the path starts with the "/"
 ENTRYPOINT ["/vcml-pydrofoil/launch.sh"]

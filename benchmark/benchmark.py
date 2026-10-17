@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
 """Run a benchmark sweep on the VP and collect the results in a CSV file.
 
-    python3 benchmark/benchmark.py benchmark/sweeps/zephyr_is.json
-    python3 benchmark/benchmark.py benchmark/sweeps/smoke.json --dry-run
+    python3 benchmark/benchmark.py benchmark/sweeps/zephyr_is.json \
+        --zephyr-elfs <zephyr_tests>/benchmark/build_is
+    python3 benchmark/benchmark.py benchmark/sweeps/dhrystone.json \
+        --dhrystone-elfs <multicore_test>/dhrystone/benchmarks
     python3 benchmark/benchmark.py benchmark/sweeps/linux_npb.json \
         --images <Pydrofoil-RISCV-benchmarks>/sw/images/buildroot
+
+The inputs (ELFs, Linux images) stay where their projects build them; every
+benchmark takes its folder from the command line (--zephyr-elfs,
+--dhrystone-elfs, --images). Add --dry-run to only list the runs.
 
 A sweep file describes one or more blocks of parameters; every combination of
 the listed values is run 'runs' times:
@@ -14,6 +20,9 @@ the listed values is run 'runs' times:
       "quantum": ["1us", "100us"], "async": [false, true], "async_rate": [1, 5]}]
 
 async_rate only matters with async=true, for async=false it is left empty.
+"shared": [false, true] runs the harts in one shared Pydrofoil interpreter
+(shared_pydrofoil) instead of one per hart (dlmopen); it needs async=false,
+combinations with async=true are skipped.
 Results are appended to results/<sweep name>.csv (or --out), runs that are
 already in that file are skipped, so an interrupted sweep can be restarted.
 The output of every run is kept in results/logs/.
@@ -36,37 +45,53 @@ import time
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MAX_HARTS = 8
 
+# Command line options for the input folders: key -> (option, help)
+INPUTS = {
+    "zephyr_elfs": ("--zephyr-elfs", "folder with zephyr_is_<class>_<n>cores.elf "
+                                     "(zephyr_tests/benchmark/build_is), needed for zephyr_is"),
+    "dhrystone_elfs": ("--dhrystone-elfs", "folder with dhrystone_core<i>.riscv "
+                                           "(multicore_test/dhrystone/benchmarks), needed for dhrystone"),
+    "images": ("--images", "folder with the Linux images and their pydrofoil.cfg "
+                           "(Pydrofoil-RISCV-benchmarks/sw/images/buildroot), needed for linux_npb"),
+}
+
 # Base config per benchmark; the sweep parameters are applied on top with -c.
-#   cfg:      config, relative to the repo; {images} is the --images directory
-#   elf:      per-run ELF (format string), None if fixed in the config
+# {input} in the format strings is the benchmark's input folder (INPUTS).
+#   input:    key of INPUTS
+#   cfg:      config, relative to the repo or in the input folder
+#   elf:      per-run ELF, passed as -c elf=...
+#   elfdir:   per-core ELFs elfdir/<name>, passed as -c elfdir=<input folder>
 #   apps:     benchmark has an "app" parameter (several programs in one image)
 #   rootfs:   Linux root filesystem; every run gets a fresh copy with the job
 #             file written into it (see job_file())
 #   finished: output that marks a successful run
 BENCHMARKS = {
     "zephyr_is": {
+        "input": "zephyr_elfs",
         "cfg": "benchmark/zephyr_is/zephyr_is.cfg",
-        "elf": "benchmark/zephyr_is/build/zephyr_is_{cls}_{n_cores}cores.elf",
+        "elf": "{input}/zephyr_is_{cls}_{n_cores}cores.elf",
         "finished": "cores have finished",
     },
     "dhrystone": {
+        "input": "dhrystone_elfs",
         "cfg": "benchmark/dhrystone_multicore/dhrystone.cfg",
-        "elf": None,  # fixed set of per-core ELFs in the config
+        "elfdir": "dhrystone_core{i}.riscv",
         "finished": "cores have finished",
     },
     # NPB3.3-OMP under Linux (Pydrofoil-RISCV-benchmarks, package npb): app is
     # the benchmark (is, ep, cg), class the NPB class, one OpenMP thread per
     # hart. The config is the pydrofoil.cfg installed next to the images.
     "linux_npb": {
-        "cfg": "{images}/pydrofoil.cfg",
-        "elf": None,
+        "input": "images",
+        "cfg": "{input}/pydrofoil.cfg",
         "apps": True,
-        "rootfs": "{images}/rootfs.ext4",
+        "rootfs": "{input}/rootfs.ext4",
         "finished": re.compile(r"Verification\s*=\s*SUCCESSFUL"),
     },
 }
 
-PARAMS = ["benchmark", "app", "class", "n_cores", "quantum", "async", "async_rate"]
+PARAMS = ["benchmark", "app", "class", "n_cores", "quantum", "async", "async_rate", "shared"]
+OLD_COLUMNS_MISSING = {"shared": "false"}  # columns added later and their value in old rows
 RESULTS = ["status", "exit_code", "wall_time", "duration", "runtime",
            "benchmark_time", "guest_time", "mops", "instructions", "mips"]
 HARTS = ["insns_hart%d" % i for i in range(MAX_HARTS)]
@@ -107,33 +132,63 @@ def expand(block):
             sys.exit("sweep block for '%s' needs '%s'" % (bench, name))
 
     info = BENCHMARKS[bench]
-    classes = values(block, "class", "") if info["elf"] or info.get("apps") else [""]
+    classes = values(block, "class", "") if info.get("elf") or info.get("apps") else [""]
     apps = values(block, "app", "") if info.get("apps") else [""]
     seen = set()
-    for app, cls, n, q, a, rate in itertools.product(apps, classes, values(block, "n_cores", None),
-                                                     values(block, "quantum", None),
-                                                     values(block, "async", False),
-                                                     values(block, "async_rate", 5)):
+    for app, cls, n, q, a, rate, sh in itertools.product(apps, classes, values(block, "n_cores", None),
+                                                         values(block, "quantum", None),
+                                                         values(block, "async", False),
+                                                         values(block, "async_rate", 5),
+                                                         values(block, "shared", False)):
+        if a and sh:
+            continue  # one interpreter cannot run harts in parallel
         run = {"benchmark": bench, "app": app, "class": cls, "n_cores": str(n), "quantum": q,
-               "async": str(bool(a)).lower(), "async_rate": str(rate) if a else ""}
+               "async": str(bool(a)).lower(), "async_rate": str(rate) if a else "",
+               "shared": str(bool(sh)).lower()}
         key = tuple(run[p] for p in PARAMS)
         if key not in seen:
             seen.add(key)
             yield run
 
 
-def vp_args(run):
+def base_cfg(run, inputs):
+    info = BENCHMARKS[run["benchmark"]]
+    return info["cfg"].format(input=inputs.get(info["input"]))
+
+
+def vp_args(run, inputs):
     """sysc_vp arguments that turn the base config into this run."""
+    info = BENCHMARKS[run["benchmark"]]
+    folder = inputs.get(info["input"])
     n = int(run["n_cores"])
     args = ["-c", "system.ncores=%d" % n, "-c", "system.quantum=%s" % run["quantum"]]
     for i in range(n):
         args += ["-c", "system.core%d.async=%s" % (i, run["async"])]
         if run["async_rate"]:
             args += ["-c", "system.core%d.async_rate=%s" % (i, run["async_rate"])]
-    elf = BENCHMARKS[run["benchmark"]]["elf"]
-    if elf:
-        args += ["-c", "elf=" + elf.format(cls=run["class"], n_cores=n)]
+        if run["shared"] == "true":
+            args += ["-c", "system.core%d.shared_pydrofoil=true" % i]
+    if info.get("elf"):
+        args += ["-c", "elf=" + info["elf"].format(input=folder, cls=run["class"], n_cores=n)]
+    if info.get("elfdir"):
+        args += ["-c", "elfdir=" + folder]
     return args
+
+
+def missing_input(run, inputs):
+    """The first input file of this run that does not exist, or None."""
+    info = BENCHMARKS[run["benchmark"]]
+    folder = inputs.get(info["input"])
+    n = int(run["n_cores"])
+    files = []
+    if info.get("elf"):
+        files.append(info["elf"].format(input=folder, cls=run["class"], n_cores=n))
+    if info.get("elfdir"):
+        files += [os.path.join(folder, info["elfdir"].format(i=i)) for i in range(n)]
+    for path in files:
+        if not os.path.isfile(path):
+            return path
+    return None
 
 
 def vp_commit():
@@ -187,19 +242,17 @@ def parse(output):
     return res
 
 
-def execute(run, iteration, timeout, log_dir, images):
+def execute(run, iteration, timeout, log_dir, inputs):
     info = BENCHMARKS[run["benchmark"]]
-    cfg = info["cfg"].format(images=images)
-    args = vp_args(run)
-    elf = info["elf"]
-    if elf:
-        path = os.path.join(REPO, elf.format(cls=run["class"], n_cores=run["n_cores"]))
-        if not os.path.isfile(path):
-            return {"status": "missing_elf", "exit_code": "", "log": path}
+    cfg = base_cfg(run, inputs)
+    args = vp_args(run, inputs)
+    missing = missing_input(run, inputs)
+    if missing:
+        return {"status": "missing_elf", "exit_code": "", "log": missing}
 
     tmp_dir = None
     if info.get("rootfs"):
-        rootfs = info["rootfs"].format(images=images)
+        rootfs = info["rootfs"].format(input=inputs[info["input"]])
         if not os.path.isfile(rootfs):
             return {"status": "missing_rootfs", "exit_code": "", "log": rootfs}
         tmp_dir = tempfile.mkdtemp(prefix="rootfs_", dir=os.path.dirname(log_dir))
@@ -244,6 +297,26 @@ def execute(run, iteration, timeout, log_dir, images):
     return res
 
 
+def upgrade_csv(path, header):
+    """Adds the columns of OLD_COLUMNS_MISSING to a CSV written before they
+    existed (keeping a .bak copy); False if the header differs otherwise."""
+    missing = set(COLUMNS) - set(header)
+    if not missing or not missing <= set(OLD_COLUMNS_MISSING) or not set(header) <= set(COLUMNS):
+        return False
+    with open(path, newline="") as f:
+        rows = list(csv.DictReader(f))
+    shutil.copyfile(path, path + ".bak")
+    with open(path, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=COLUMNS)
+        w.writeheader()
+        for row in rows:
+            row.update({c: OLD_COLUMNS_MISSING[c] for c in missing})
+            w.writerow(row)
+    print("%s: added column(s) %s (old version in %s.bak)" % (path, ", ".join(sorted(missing)),
+                                                             os.path.basename(path)))
+    return True
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("sweep", help="sweep description (JSON)")
@@ -251,10 +324,10 @@ def main():
     ap.add_argument("--retry-failed", action="store_true",
                     help="run again what is in the CSV with a status other than ok")
     ap.add_argument("--dry-run", action="store_true", help="only list the runs")
-    ap.add_argument("--images", help="directory with the Linux images and their pydrofoil.cfg "
-                    "(Pydrofoil-RISCV-benchmarks/sw/images/buildroot), needed for linux_npb")
+    for key, (option, help_text) in INPUTS.items():
+        ap.add_argument(option, dest=key, help=help_text)
     opts = ap.parse_args()
-    images = os.path.abspath(opts.images) if opts.images else None
+    inputs = {key: os.path.abspath(getattr(opts, key)) for key in INPUTS if getattr(opts, key)}
 
     with open(opts.sweep) as f:
         blocks = json.load(f)
@@ -269,6 +342,8 @@ def main():
     if os.path.isfile(out):
         with open(out, newline="") as f:
             header = next(csv.reader(f), [])
+        if header != COLUMNS and upgrade_csv(out, header):
+            header = COLUMNS
         if header != COLUMNS:
             sys.exit("%s has different columns (written by an older benchmark.py): delete or "
                  "rename it, or write to another file with --out" % out)
@@ -284,20 +359,21 @@ def main():
                 if tuple(run[p] for p in PARAMS) + (str(it),) not in done:
                     todo.append((run, it, block.get("timeout", 600)))
 
-    if any("{images}" in BENCHMARKS[run["benchmark"]]["cfg"] for run, _, _ in todo):
-        if not images:
-            sys.exit("this sweep runs Linux: give the image directory with --images "
-                     "(Pydrofoil-RISCV-benchmarks/sw/images/buildroot)")
-        if not os.path.isfile(os.path.join(images, "pydrofoil.cfg")):
-            sys.exit("%s has no pydrofoil.cfg: not a Linux image directory, or built before "
-                     "the config was installed next to the images" % images)
+    for key in sorted({BENCHMARKS[run["benchmark"]]["input"] for run, _, _ in todo}):
+        option, help_text = INPUTS[key]
+        if key not in inputs:
+            sys.exit("this sweep needs %s: %s" % (option, help_text))
+        if not os.path.isdir(inputs[key]):
+            sys.exit("%s %s: no such directory" % (option, inputs[key]))
+    if "images" in inputs and not os.path.isfile(os.path.join(inputs["images"], "pydrofoil.cfg")):
+        sys.exit("%s has no pydrofoil.cfg: not a Linux image directory, or built before "
+                 "the config was installed next to the images" % inputs["images"])
 
     print("%d runs to do, results in %s" % (len(todo), os.path.relpath(out)))
     if opts.dry_run:
         for run, it, _ in todo:
             print("  %s  #%d  ./launch.sh %s %s" % (" ".join("%s=%s" % (p, run[p]) for p in PARAMS[1:] if run[p]),
-                                                  it, BENCHMARKS[run["benchmark"]]["cfg"].format(images=images),
-                                                  " ".join(vp_args(run))))
+                                                  it, base_cfg(run, inputs), " ".join(vp_args(run, inputs))))
         return
 
     os.makedirs(log_dir, exist_ok=True)
@@ -309,7 +385,7 @@ def main():
     for k, (run, it, timeout) in enumerate(todo, 1):
         desc = " ".join("%s=%s" % (p, run[p]) for p in PARAMS if run[p])
         print("[%d/%d] %s #%d ... " % (k, len(todo), desc, it), end="", flush=True)
-        res = execute(run, it, timeout, log_dir, images)
+        res = execute(run, it, timeout, log_dir, inputs)
         print("%s  %ss  benchmark_time=%s" % (res["status"], res.get("wall_time", "-"),
                                              res.get("benchmark_time", "-") or "-"))
         row = dict(run, iteration=it, timestamp=datetime.datetime.now().isoformat(timespec="seconds"),

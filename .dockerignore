@@ -1,0 +1,18 @@
+# Built inside the image by build_sim.sh: a host build/ would bring a
+# CMakeCache.txt with host paths that cmake refuses in /vcml-pydrofoil/build
+build
+_pydrofoilcapi_cffi.c
+_pydrofoilcapi_cffi.o
+libpydrofoilcapi_cffi.so
+testplugin
+
+# Host-side output and scratch, mounted at run time where needed
+results
+logs
+isolated_libs
+figures
+
+# Plugin tarballs: the unpacked pypy-pydrofoil-scripting-experimental/ is what
+# the image uses
+*.tar.bz2
+*.tar-*.bz2
