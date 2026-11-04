@@ -3,7 +3,6 @@ set -e
 
 # Absolute path of the directory containing the script
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PYDROFOIL_BIN_DIR="$SCRIPT_DIR/pypy-pydrofoil-scripting-experimental/bin"
 
 # If user specified a preference, try it. Use docker otherwise
 CONTAINER_PROGRAM=${1:-docker}
@@ -31,10 +30,12 @@ else
 	exit 1
 fi
 
-if [[ ! -d "$PYDROFOIL_BIN_DIR" ]]; then
-	echo "Pydrofoil bin not found in: "$PYDROFOIL_BIN_DIR". Exiting..."
+# Every pydrofoil/<name>/ (unpacked plugin tarball) ends up in the image
+if ! compgen -G "$SCRIPT_DIR/pydrofoil/*/bin/pypy3" > /dev/null; then
+	echo "No Pydrofoil plugin in $SCRIPT_DIR/pydrofoil/<name>/bin. Exiting..."
 	exit 1
 fi
+echo "Pydrofoil plugins: $(cd "$SCRIPT_DIR/pydrofoil" && ls -d */ | tr -d / | tr '\n' ' ')"
 
 IMAGE_NAME="vcml-pydrofoil:latest"
 

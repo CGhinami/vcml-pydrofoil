@@ -1,0 +1,9 @@
+[
+    {"benchmark": "linux_npb", "runs": 1, "timeout": 3600,
+     "app": ["ep"], "class": ["W"], "n_cores": [1, 8],
+     "quantum": ["100us"], "async": [false], "pydrofoil": ["old"]},
+    {"benchmark": "linux_npb", "runs": 1, "timeout": 3600,
+     "app": ["ep"], "class": ["W"], "n_cores": [8],
+     "quantum": ["100us"], "async": [true], "async_rate": [1, 5],
+     "pydrofoil": ["new"]}
+]

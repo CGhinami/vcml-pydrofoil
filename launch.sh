@@ -4,9 +4,12 @@
 # with gdb: ./launch.sh -d <path to myconfig.cfg> [extra sysc_vp args]
 # extra args come after -f and override the config file, e.g.
 #   ./launch.sh <cfg> -c system.ncores=4 -c system.quantum=1us
+# PYDROFOIL=<name> picks the Pydrofoil plugin in pydrofoil/<name>/ (default: old)
+#   PYDROFOIL=new ./launch.sh <cfg>
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PYDROFOIL_BIN_DIR="$SCRIPT_DIR/pypy-pydrofoil-scripting-experimental/bin"
+PYDROFOIL=${PYDROFOIL:-old}
+PYDROFOIL_DIR="$SCRIPT_DIR/pydrofoil/$PYDROFOIL"
 VP_BINARY="$SCRIPT_DIR/build/sysc_vp"
 VP_BENCHMARK="$SCRIPT_DIR/benchmark"
 
@@ -41,8 +44,14 @@ if [[ ! -f "$VP_BINARY" ]]; then
     exit 1
 fi
 
-
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:"$PYDROFOIL_BIN_DIR"
+if [[ ! -f "$PYDROFOIL_DIR/libpydrofoilcapi_cffi.so" ]]; then
+    echo "Pydrofoil '$PYDROFOIL' not built: no $PYDROFOIL_DIR/libpydrofoilcapi_cffi.so"
+    echo "Available: $(cd "$SCRIPT_DIR/pydrofoil" 2>/dev/null && ls -d */ 2>/dev/null | tr -d / | tr '\n' ' ')"
+    exit 1
+fi
+# read by sysc_vp as the default of system.coreN.pydrofoil_lib
+export PYDROFOIL_LIB="$PYDROFOIL_DIR/libpydrofoilcapi_cffi.so"
+echo "Pydrofoil: $PYDROFOIL ($PYDROFOIL_DIR)"
 
 if [[ "$DEBUG" == "1" ]]; then
     echo "Running in debug mode (gdb)…"

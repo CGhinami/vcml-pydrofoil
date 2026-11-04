@@ -23,6 +23,8 @@ async_rate only matters with async=true, for async=false it is left empty.
 "shared": [false, true] runs the harts in one shared Pydrofoil interpreter
 (shared_pydrofoil) instead of one per hart (dlmopen); it needs async=false,
 combinations with async=true are skipped.
+"pydrofoil": ["old", "new"] picks the Pydrofoil plugin, pydrofoil/<name>/
+(launch.sh PYDROFOIL=<name>); default old.
 Results are appended to results/<sweep name>.csv (or --out), runs that are
 already in that file are skipped, so an interrupted sweep can be restarted.
 The output of every run is kept in results/logs/.
@@ -90,9 +92,10 @@ BENCHMARKS = {
     },
 }
 
-PARAMS = ["benchmark", "app", "class", "n_cores", "quantum", "async", "async_rate", "shared"]
+PARAMS = ["benchmark", "app", "class", "n_cores", "quantum", "async", "async_rate", "shared",
+          "pydrofoil"]
 # columns added later and their value in old rows
-OLD_COLUMNS_MISSING = {"shared": "false", "max_rss_mb": ""}
+OLD_COLUMNS_MISSING = {"shared": "false", "max_rss_mb": "", "pydrofoil": "old"}
 RESULTS = ["status", "exit_code", "wall_time", "duration", "runtime",
            "benchmark_time", "guest_time", "mops", "instructions", "mips", "max_rss_mb"]
 HARTS = ["insns_hart%d" % i for i in range(MAX_HARTS)]
@@ -136,16 +139,17 @@ def expand(block):
     classes = values(block, "class", "") if info.get("elf") or info.get("apps") else [""]
     apps = values(block, "app", "") if info.get("apps") else [""]
     seen = set()
-    for app, cls, n, q, a, rate, sh in itertools.product(apps, classes, values(block, "n_cores", None),
-                                                         values(block, "quantum", None),
-                                                         values(block, "async", False),
-                                                         values(block, "async_rate", 5),
-                                                         values(block, "shared", False)):
+    for app, cls, n, q, a, rate, sh, py in itertools.product(apps, classes, values(block, "n_cores", None),
+                                                             values(block, "quantum", None),
+                                                             values(block, "async", False),
+                                                             values(block, "async_rate", 5),
+                                                             values(block, "shared", False),
+                                                             values(block, "pydrofoil", "old")):
         if a and sh:
             continue  # one interpreter cannot run harts in parallel
         run = {"benchmark": bench, "app": app, "class": cls, "n_cores": str(n), "quantum": q,
                "async": str(bool(a)).lower(), "async_rate": str(rate) if a else "",
-               "shared": str(bool(sh)).lower()}
+               "shared": str(bool(sh)).lower(), "pydrofoil": py}
         key = tuple(run[p] for p in PARAMS)
         if key not in seen:
             seen.add(key)
@@ -279,11 +283,12 @@ def execute(run, iteration, timeout, log_dir, inputs):
 
     start = time.monotonic()
     with open(log, "w") as f:
-        f.write("# " + " ".join(cmd) + "\n")
+        f.write("# PYDROFOIL=%s " % run["pydrofoil"] + " ".join(cmd) + "\n")
         f.flush()
         # own process group, so a timeout also stops sysc_vp below launch.sh
         proc = subprocess.Popen(cmd, cwd=REPO, stdout=f, stderr=subprocess.STDOUT,
-                                start_new_session=True)
+                                start_new_session=True,
+                                env=dict(os.environ, PYDROFOIL=run["pydrofoil"]))
         max_rss = ""
         try:
             rc, rss = wait_rss(proc, timeout)
@@ -390,8 +395,9 @@ def main():
     print("%d runs to do, results in %s" % (len(todo), os.path.relpath(out)))
     if opts.dry_run:
         for run, it, _ in todo:
-            print("  %s  #%d  ./launch.sh %s %s" % (" ".join("%s=%s" % (p, run[p]) for p in PARAMS[1:] if run[p]),
-                                                  it, base_cfg(run, inputs), " ".join(vp_args(run, inputs))))
+            print("  %s  #%d  PYDROFOIL=%s ./launch.sh %s %s" % (" ".join("%s=%s" % (p, run[p]) for p in PARAMS[1:] if run[p]),
+                                                  it, run["pydrofoil"], base_cfg(run, inputs),
+                                                  " ".join(vp_args(run, inputs))))
         return
 
     os.makedirs(log_dir, exist_ok=True)

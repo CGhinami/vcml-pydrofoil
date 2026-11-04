@@ -1,0 +1,5 @@
+[
+    {"benchmark": "linux_npb", "runs": 1, "timeout": 14400,
+     "app": ["ep", "is"], "class": ["A"], "n_cores": [1],
+     "quantum": ["100us"], "async": [false], "pydrofoil": ["new"]}
+]

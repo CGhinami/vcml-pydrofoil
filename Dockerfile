@@ -44,7 +44,9 @@ ENV PYTHONPATH="/vcml-pydrofoil"
 RUN chmod +x build_sim.sh
 RUN ./build_sim.sh
 
-ENV LD_LIBRARY_PATH=/vcml-pydrofoil/pypy-pydrofoil-scripting-experimental/bin:/vcml-pydrofoil:/vcml-pydrofoil/build:/vcml-pydrofoil/sysc_vp:${LD_LIBRARY_PATH:-}
+# the Pydrofoil plugins (pydrofoil/<name>/bin) are found through the rpath of
+# their C API library, launch.sh picks one with PYDROFOIL=<name>
+ENV LD_LIBRARY_PATH=/vcml-pydrofoil:/vcml-pydrofoil/build:/vcml-pydrofoil/sysc_vp:${LD_LIBRARY_PATH:-}
 
 RUN chmod +x launch.sh
 

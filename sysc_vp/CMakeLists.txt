@@ -37,10 +37,11 @@ add_executable(sysc_vp
 
 # Every hart dlmopen()s its own copy of the Pydrofoil C API (see
 # pydrofoil_lib.h), so it is not linked; this is the default path of the
-# system.coreN.pydrofoil_lib property. Its libpypy3.11-c.so dependency is
-# found through LD_LIBRARY_PATH (set by launch.sh).
+# system.coreN.pydrofoil_lib property if the environment variable
+# PYDROFOIL_LIB (set by launch.sh from PYDROFOIL=<name>) is not set. Its
+# libpypy3.11-c.so dependency is found through its rpath (build_sim.sh).
 target_compile_definitions(sysc_vp PRIVATE
-    PYDROFOIL_CAPI_LIB="${PYDROFOIL_LIB_DIR}/libpydrofoilcapi_cffi.so"
+    PYDROFOIL_CAPI_LIB="${PYDROFOIL_LIB_DIR}/pydrofoil/old/libpydrofoilcapi_cffi.so"
 )
 
 # in ${PYDROFOIL_LIB_DIR} we have pydrofoilcapi.h

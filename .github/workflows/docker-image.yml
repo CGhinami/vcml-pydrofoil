@@ -31,8 +31,8 @@ jobs:
           gh run download $RUN_ID --repo pydrofoil/pydrofoil --name artifact --dir ./tmp-artifact
           
           # Extract the actual tarball contents into the directory your script looks for
-          mkdir -p ./pypy-pydrofoil-scripting-experimental
-          tar -xjf ./tmp-artifact/pypy-pydrofoil-scripting-experimental.tar.bz2 -C ./pypy-pydrofoil-scripting-experimental --strip-components=1
+          mkdir -p ./pydrofoil/old
+          tar -xjf ./tmp-artifact/pypy-pydrofoil-scripting-experimental.tar.bz2 -C ./pydrofoil/old --strip-components=1
           
           # Clean up the temporary folder
           rm -rf ./tmp-artifact

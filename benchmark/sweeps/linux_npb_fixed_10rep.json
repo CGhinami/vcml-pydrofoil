@@ -1,0 +1,142 @@
+[
+    {
+        "_comment": "S sync",
+        "benchmark": "linux_npb",
+        "runs": 10,
+        "timeout": 900,
+        "app": [
+            "bt",
+            "cg",
+            "ep",
+            "ft",
+            "is",
+            "lu",
+            "mg",
+            "sp"
+        ],
+        "class": [
+            "S"
+        ],
+        "n_cores": [
+            1,
+            2,
+            4,
+            8
+        ],
+        "quantum": [
+            "100us"
+        ],
+        "async": [
+            false
+        ],
+        "pydrofoil": [
+            "old"
+        ]
+    },
+    {
+        "_comment": "S async rate 10",
+        "benchmark": "linux_npb",
+        "runs": 10,
+        "timeout": 900,
+        "app": [
+            "bt",
+            "cg",
+            "ep",
+            "ft",
+            "is",
+            "lu",
+            "mg",
+            "sp"
+        ],
+        "class": [
+            "S"
+        ],
+        "n_cores": [
+            2,
+            4,
+            8
+        ],
+        "quantum": [
+            "100us"
+        ],
+        "async": [
+            true
+        ],
+        "async_rate": [
+            10
+        ],
+        "pydrofoil": [
+            "new"
+        ]
+    },
+    {
+        "_comment": "W sync",
+        "benchmark": "linux_npb",
+        "runs": 10,
+        "timeout": 2700,
+        "app": [
+            "bt",
+            "cg",
+            "ep",
+            "ft",
+            "is",
+            "lu",
+            "mg",
+            "sp"
+        ],
+        "class": [
+            "W"
+        ],
+        "n_cores": [
+            1,
+            2,
+            4,
+            8
+        ],
+        "quantum": [
+            "100us"
+        ],
+        "async": [
+            false
+        ],
+        "pydrofoil": [
+            "old"
+        ]
+    },
+    {
+        "_comment": "W async rate 10",
+        "benchmark": "linux_npb",
+        "runs": 10,
+        "timeout": 2700,
+        "app": [
+            "bt",
+            "cg",
+            "ep",
+            "ft",
+            "is",
+            "lu",
+            "mg",
+            "sp"
+        ],
+        "class": [
+            "W"
+        ],
+        "n_cores": [
+            2,
+            4,
+            8
+        ],
+        "quantum": [
+            "100us"
+        ],
+        "async": [
+            true
+        ],
+        "async_rate": [
+            10
+        ],
+        "pydrofoil": [
+            "new"
+        ]
+    }
+]

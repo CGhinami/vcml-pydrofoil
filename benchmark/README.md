@@ -1,99 +1,99 @@
 # Benchmarks
 
-The inputs (ELFs, Linux images) stay where their projects build them; nothing
-is copied into this repo.
+This README covers the Linux NPB benchmark for now. `benchmark.py` also runs
+Zephyr IS and Dhrystone, see its help text.
 
-| Benchmark | Config | Inputs, built by | `benchmark.py` option |
-|---|---|---|---|
-| Zephyr SMP, NAS IS | `zephyr_is/zephyr_is.cfg` | `zephyr_tests/benchmark/build_is/zephyr_is_<class>_<n>cores.elf`, `zephyr_tests/build_is.sh` | `--zephyr-elfs` |
-| Dhrystone, one instance per core (baremetal) | `dhrystone_multicore/dhrystone.cfg` | `multicore_test/dhrystone/benchmarks/dhrystone_core<i>.riscv`, riscv-tests | `--dhrystone-elfs` |
-| Linux (1/2/4/8 harts), NPB3.3-OMP BT / CG / EP / FT / IS / LU / MG / SP | `pydrofoil.cfg` next to the images | `Pydrofoil-RISCV-benchmarks/sw/images/buildroot/`, `sw/linux/build_linux.sh` (package `npb`) | `--images` |
+## Linux NPB
 
-Every config runs on its own and takes overrides after it (`elf` / `elfdir`
-point to the inputs):
+The VP boots Linux with 1/2/4/8 harts and runs one benchmark of NPB3.3-OMP
+during boot, with one OpenMP thread per hart:
 
-```bash
-./launch.sh benchmark/zephyr_is/zephyr_is.cfg -c system.ncores=4 \
-    -c elf=<zephyr_tests>/benchmark/build_is/zephyr_is_W_4cores.elf -c system.quantum=100us
-./launch.sh benchmark/dhrystone_multicore/dhrystone.cfg -c system.ncores=4 \
-    -c elfdir=<multicore_test>/dhrystone/benchmarks
-```
+- benchmarks (`app`): `bt`, `cg`, `ep`, `ft`, `is`, `lu`, `mg`, `sp`
+- classes (`class`): `S`, `W`, `A`, `B`, plus `C` for `ep` and `is`
 
-The Linux config is not in this repo but installed by the image build next to
-the images, so it always matches them (all paths in it are relative to it):
+
+### One run by hand
 
 ```bash
 ./launch.sh <Pydrofoil-RISCV-benchmarks>/sw/images/buildroot/pydrofoil.cfg -c system.ncores=4
 ```
 
+This boots Linux. Without `/etc/npb_job` in the root file system no benchmark
+runs, sweeps write that file for every run.
+
 ## Sweeps
 
-`benchmark.py` runs every combination of the parameters in a sweep file and
-appends one line per run to `results/<sweep>.csv` (the log of each run goes to
-`results/logs/<sweep>/`):
+`benchmark.py` runs every combination of the parameters in a sweep file, `runs`
+times each. In the container (VP and Pydrofoil plugins from the image, see the
+top-level README):
 
 ```bash
-python3 benchmark/benchmark.py benchmark/sweeps/zephyr_is.json \
-    --zephyr-elfs <zephyr_tests>/benchmark/build_is
-python3 benchmark/benchmark.py benchmark/sweeps/dhrystone.json \
-    --dhrystone-elfs <multicore_test>/dhrystone/benchmarks
+./container_run_benchmark.sh podman benchmark/sweeps/linux_npb_fixed_1rep.json \
+    --images <Pydrofoil-RISCV-benchmarks>/sw/images/buildroot \
+    --out results/linux_npb_fixed.csv
+```
+
+Without the container:
+
+```bash
 python3 benchmark/benchmark.py benchmark/sweeps/linux_npb.json \
     --images <Pydrofoil-RISCV-benchmarks>/sw/images/buildroot
 ```
 
-`--dry-run` only lists the runs. A sweep needs the options of the benchmarks it
-contains (`smoke.json`: `--zephyr-elfs` and `--dhrystone-elfs`). In the
-container: `./container_run_benchmark.sh` with the same arguments (see the
-top-level README).
+| Option | Meaning |
+|---|---|
+| `--images` | Image directory, `pydrofoil.cfg` and `rootfs.ext4` are taken from there |
+| `--out` | CSV file, default `results/<sweep>.csv` |
+| `--dry-run` | Only list the runs |
+| `--retry-failed` | Run again what did not finish with `ok` |
+
+A sweep file is a list of blocks:
 
 ```json
-[{"benchmark": "zephyr_is", "runs": 3, "timeout": 1800,
-  "class": ["S", "W"], "n_cores": [1, 2, 4, 8], "quantum": ["1us", "100us"],
-  "async": [false, true], "async_rate": [1, 5, 10]}]
+[{"benchmark": "linux_npb", "runs": 10, "timeout": 900,
+  "app": ["cg", "is"], "class": ["S"], "n_cores": [2, 4, 8],
+  "quantum": ["100us"], "async": [true], "async_rate": [10],
+  "pydrofoil": ["new"]}]
 ```
 
-- `async_rate` only applies to `async=true`.
-- `"shared": [false, true]` runs the harts in one shared Pydrofoil
-  interpreter (`system.core<i>.shared_pydrofoil=true`) instead of one per hart
-  (`dlmopen`). It needs `async=false`, combinations with `async=true` are
-  skipped. Note: with the current Pydrofoil build the harts of a shared
-  interpreter also see each other's interrupt lines, so only workloads without
-  interrupts (Dhrystone) run correctly in it.
-- A CSV written before the `shared` column existed gets it added
-  (`shared=false`, the old file is kept as `.bak`).
-- Runs already in the CSV are skipped, an interrupted sweep continues where it
-  stopped. `--retry-failed` runs again what did not finish with `ok`.
-- `status`: `ok`, `timeout` (killed after `timeout` seconds), `crash` (non-zero
-  exit), `unfinished` (ended without all cores reporting done, e.g.
-  `system.duration`), `missing_elf`.
-- `benchmark_time` is the wall clock time since the guest first read
-  `multicore_simdev.hclk` (start of the measured part, Zephyr IS and
-  Dhrystone; with several cores the earliest core counts),
-  `runtime` the wall clock time of the whole simulation, `duration` the
-  simulated time. `max_rss_mb` is the peak resident memory of the VP process
-  in MiB (`ru_maxrss` from `wait4`, empty for `timeout`; rows from before the
-  column existed get it empty). `vp_commit` is the VP version the run was made with
-  (`-dirty` when `sysc_vp/` or `gluecode.py` had uncommitted changes).
-- Zephyr IS on several cores with `async=true` is not reliable before the
-  atomics are handled in Pydrofoil (runs can hang, see the timeout).
-- `linux_npb` needs `--images`, the image directory; config and `rootfs.ext4`
-  are taken from there. `app` is the NPB benchmark (`bt`, `cg`, `ep`, `ft`, `is`, `lu`,
-  `mg`, `sp`), `class` the NPB
-  class (`S`, `W`), one OpenMP thread per hart. Every run boots Linux from a
-  fresh copy of `rootfs.ext4` with `/etc/npb_job` written into it (`debugfs`),
-  the init script `S98npb` runs the benchmark, then `simexit` ends the
-  simulation. `benchmark_time` is the host time of the benchmark alone (simdev
-  `hclk` before/after), `guest_time` NPB's own "Time in seconds" (simulated
-  time), status `ok` needs "Verification = SUCCESSFUL".
+- `async_rate` only applies to `async=true`, for `async=false` the column is
+  empty. A quantum is split into `async_rate` chunks.
+- `pydrofoil` picks the plugin in `pydrofoil/<name>/`, default `old`. `new` has
+  the atomics fix that `async=true` needs. `async=false` does not need it, so
+  those runs use `old`.
+- `timeout` is in seconds. A run that times out is killed and counts as done
+  unless `--retry-failed` is given.
+- Runs already in the CSV are skipped, so an interrupted sweep continues where
+  it stopped. Only the CSV as it is at the start of a sweep counts.
 
-## Plots
+## What one run does
 
-```bash
-pip install pandas matplotlib seaborn
-python3 benchmark/plot.py results/zephyr_is.csv                 # benchmark_time
-python3 benchmark/plot.py results/zephyr_is.csv --metric mips
-```
+1. `benchmark.py` copies `rootfs.ext4` and writes `/etc/npb_job` into the copy
+   (`e2fsck`, `debugfs`), for example `NPB_BENCH=cg.W` and `OMP_NUM_THREADS=4`.
+2. The VP boots OpenSBI and Linux, then BusyBox init runs the scripts in
+   `/etc/init.d/`.
+3. `S98npb` prints the host time, runs the benchmark, and prints the host time
+   and the exit code (`NPB_HCLK_START`, `NPB_HCLK_END`, `NPB_EXIT`).
+4. `S99hello_world` calls `simexit`, which ends the simulation.
+5. `benchmark.py` parses the log and appends one line to the CSV. The log stays
+   in `results/logs/<sweep>/`.
 
-One figure per benchmark and IS class in `results/plots/`: cores on the x
-axis, colour = quantum, marker = sync / async rate, mean and standard
-deviation over the iterations.
+## Results
+
+| Column | Meaning |
+|---|---|
+| `status` | `ok` needs "Verification = SUCCESSFUL". Otherwise `timeout`, `crash` (non-zero exit), `unfinished` (ended without successful verification) or `missing_rootfs` |
+| `benchmark_time` | Host seconds of the benchmark alone, `NPB_HCLK_END` - `NPB_HCLK_START` |
+| `guest_time` | NPB's "Time in seconds", simulated time of its compute part |
+| `runtime` | Host seconds of the whole simulation, including the boot |
+| `duration` | Simulated seconds of the whole simulation |
+| `mops` | NPB's Mop/s |
+| `instructions`, `mips` | Instructions of all harts and simulation speed |
+| `max_rss_mb` | Peak host memory of the VP in MiB, empty after a timeout |
+| `iteration` | Number of the repetition, starts at 1 |
+| `pydrofoil` | Plugin the run used |
+| `vp_commit` | VP version, `-dirty` when `sysc_vp/` or `gluecode.py` had uncommitted changes |
+
+Compare speed with `benchmark_time`, it does not contain the boot.
+
+

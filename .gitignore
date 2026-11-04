@@ -1,4 +1,5 @@
 pypy-pydrofoil-scripting-experimental/*
+pydrofoil/
 testplugin
 _pydrofoilcapi_cffi.*
 *.o
@@ -15,3 +16,6 @@ _pydrofoilcapi_cffi.*
 **/build/
 **/bin/
 results/
+logs/
+*.oct05
+*.oct05/

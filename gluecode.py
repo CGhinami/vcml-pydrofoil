@@ -355,6 +355,11 @@ def pydrofoil_cpu_set_dma_region(i, base_address, size, memory):
     
     ptr_val = int(ffi.cast("uintptr_t", memory))
     cpu.cpu.add_dmi_region(base_address, size, ptr_val)
+    # LR/SC/AMO work atomically on this host memory (host atomics), only with
+    # a Pydrofoil build that has _add_host_memory
+    if hasattr(cpu.cpu, "_add_host_memory"):
+        cpu.cpu._add_host_memory(base_address, size, ptr_val)
+        print("[I] host memory for atomics: 0x%x..0x%x" % (base_address, base_address + size - 1))
     return 0
 
 @ffi.def_extern()

@@ -12,7 +12,7 @@ logs
 isolated_libs
 figures
 
-# Plugin tarballs: the unpacked pypy-pydrofoil-scripting-experimental/ is what
+# Plugin tarballs: the unpacked pydrofoil/<name>/ is what
 # the image uses
 *.tar.bz2
 *.tar-*.bz2

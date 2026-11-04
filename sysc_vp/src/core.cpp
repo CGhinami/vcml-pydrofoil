@@ -9,10 +9,19 @@
 
 #include "core.h"
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include "riscv_arch.h"
 
 namespace core {
+
+// launch.sh exports PYDROFOIL_LIB, the C API library of the plugin picked with
+// PYDROFOIL=<name>; a pydrofoil_lib in the config still overrides it
+static std::string default_pydrofoil_lib()
+{
+    const char* lib = std::getenv("PYDROFOIL_LIB");
+    return lib && *lib ? lib : PYDROFOIL_CAPI_LIB;
+}
 
 PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name, uint64_t hart_id):
     vcml::processor(name, "riscv"),
@@ -21,7 +30,7 @@ PydrofoilCore::PydrofoilCore(const sc_core::sc_module_name& name, uint64_t hart_
     verbosity("verbose", false),
     htif_tohost("htif_tohost", 0),
     mem_dump("mem_dump", ""),
-    pydrofoil_lib("pydrofoil_lib", PYDROFOIL_CAPI_LIB),
+    pydrofoil_lib("pydrofoil_lib", default_pydrofoil_lib()),
     shared_pydrofoil("shared_pydrofoil", false),
     hart_id(hart_id),
     cpu(nullptr),
