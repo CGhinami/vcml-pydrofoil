@@ -197,11 +197,19 @@ void PydrofoilCore::simulate(size_t cycles)
             continue;
 
         bool success = false;
-        if(memtask->type == MemTask::Read) {
+        if(memtask->type == MemTask::Read)
             success = (data.read(memtask->addr, memtask->dest, memtask->size, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE);
             // memset(memtask.dest,0x297,8); // To be removed once the 0x1000 initial accesses are fixed
-        } else
+        else if(memtask->type == MemTask::Write)
             success = (data.write(memtask->addr, &memtask->value, memtask->size, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE);
+        else{
+            uint64_t prec_val = 0;
+            uint64_t mask = memtask->size == 8 ? ~0ull : (1ull << (8 * memtask->size)) - 1; // the mask is either 64 or 32 ones
+
+            success = data.read(memtask->addr, &prec_val, memtask->size, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE 
+                      && (prec_val & mask == memtask->expected & mask)
+                      && data.write(memtask->addr, &memtask->value, memtask->size, vcml::SBI_NONE) == tlm::TLM_OK_RESPONSE;
+        }
 
         if(!success)
             mwr::log_info("Memory access failed with address: %lx", memtask->addr);

@@ -77,13 +77,14 @@ class PydrofoilCore : public vcml::processor {
     std::unordered_map<uint64_t, MemRegion> mem_regions;
     void check_for_dmi_regions();
 
-    enum class MemTask { Read, Write };
+    enum class MemTask { Read, Write, Cas };
     struct MemAccess {
         MemTask type;
         uint64_t addr;
         size_t size;
         void* dest;            // for reads
         uint64_t value;        // for writes
+        uint64_t expected;     // for cas
         bool success = false;  // written by the consumer (SystemC thread) once serviced
     };
     backend::Mailbox<MemAccess> memtask_mailbox;

@@ -15,6 +15,7 @@
 extern "C" {
 int read_mem(void* cpu, uint64_t address, int size, void* destination, void* payload);
 int write_mem(void* cpu, uint64_t address, int size, uint64_t value, void* payload);
+int compare_and_swap(void* cpu, uint64_t address, int size, uint64_t value, uint64_t expected, void* payload);
 }
 
 #endif

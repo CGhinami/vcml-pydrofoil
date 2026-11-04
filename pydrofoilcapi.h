@@ -21,6 +21,15 @@ typedef int (*pydrofoil_mem_write_cb)(
     void* payload
 );
 
+typedef int (*pydrofoil_cas_cb)(
+    void* cpu,
+    uint64_t address,
+    int size,
+    uint64_t value,
+    uint64_t expected,
+    void* payload
+);
+
 
 // functions that come from rpython go here
 CFFI_DLLEXPORT void* pydrofoil_allocate_cpu(char*, const char*);
@@ -54,6 +63,7 @@ CFFI_DLLEXPORT int pydrofoil_cpu_set_ram_read_write_callback(
         void* cpu,
         pydrofoil_mem_read_cb,
         pydrofoil_mem_write_cb,
+        pydrofoil_cas_cb,
         void* payload);
 
 // Set a DMA region for direct memory access

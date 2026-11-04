@@ -58,3 +58,19 @@ int read_mem(void* cpu, uint64_t address, int size, void* destination, void* pay
 
     return memtask.success ? 0 : 1;
 }
+
+int compare_and_swap(void* cpu, uint64_t address, int size, uint64_t value, uint64_t expected, void* payload){
+    auto core = reinterpret_cast<core::PydrofoilCore*>(payload);
+
+    core::PydrofoilCore::MemAccess memtask;
+
+    memtask.type = core::PydrofoilCore::MemTask::Cas;
+    memtask.addr = address;
+    memtask.size = size;
+    memtask.value = value;
+    memtask.expected = expected;
+
+    core->memtask_mailbox.submit(memtask);
+
+    return memtask.success ? 0 : 1;
+}

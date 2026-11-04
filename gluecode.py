@@ -35,9 +35,10 @@ class C:
         self.insns_per_tick = None
         self.reset()
 
-    def _set_callbacks(self, read, write, payload):
+    def _set_callbacks(self, read, write, cas, payload):
         self.read = read
         self.write = write
+        self.cas = cas
         self.mem = ffi.new('uint64_t[1]')
         
         WIDTH_MAP = {
@@ -69,7 +70,17 @@ class C:
 
             res = self.write(self._handle, addr, width, value, payload)
             assert res == 0
-        self.callbacks = _pydrofoil.Callbacks(mem_read_intercept=pyread, mem_write_intercept=pywrite)
+
+        def pycas(addr, width, expected, value):
+            addr = int(addr)
+            value = int(value)
+            expected = int(expected)
+
+            ptr_type, bitv_size = resolve_width(width)
+
+            res = self.cas(self._handle, addr, width, expected, value, payload)
+            return res
+        self.callbacks = _pydrofoil.Callbacks(mem_read_intercept=pyread, mem_write_intercept=pywrite, cas_intercept=pycas)
 
     def set_verbosity(self, verbosity):
         self.verbosity = verbosity
@@ -213,9 +224,9 @@ def pydrofoil_cpu_remove_breakpoint(i, addr):
 
 
 @ffi.def_extern()
-def pydrofoil_cpu_set_ram_read_write_callback(i, read_cb, write_cb, payload):
+def pydrofoil_cpu_set_ram_read_write_callback(i, read_cb, write_cb, cas_cb, payload):
     cpu = ffi.from_handle(i)
-    cpu._set_callbacks(read_cb, write_cb, payload)
+    cpu._set_callbacks(read_cb, write_cb, cas_cb, payload)
     cpu.reset()
     return 0
 

@@ -28,7 +28,7 @@ auto create_handlers(core::PydrofoilCore& pycore) -> std::unordered_map<Funct, s
 #if PROFILING
                  Profiler t("SetCb");
 #endif
-                 int res = pydrofoil_cpu_set_ram_read_write_callback(pycore.cpu, read_mem, write_mem, &pycore); //
+                 int res = pydrofoil_cpu_set_ram_read_write_callback(pycore.cpu, read_mem, write_mem, compare_and_swap, &pycore); //
                  task.result = res;
              }},
             {Funct::GetCycles,
